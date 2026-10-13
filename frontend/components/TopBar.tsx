@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useDigitalTwinStore } from '../store/useDigitalTwinStore';
 import { socketService } from '../services/socket';
 import { 
@@ -161,14 +162,14 @@ export function TopBar() {
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => useDigitalTwinStore.getState().openStakeholderDashboard('EV_OWNER')}
+            <Link
+              href="/dashboard"
               title="Role-Based Stakeholder Dashboards"
               className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition-all shadow-md shadow-blue-500/20 flex items-center gap-1.5 pointer-events-auto"
             >
               <span>📊</span>
               <span className="hidden sm:inline">Dashboards</span>
-            </button>
+            </Link>
 
             <button
               onClick={() => toggleSimDrawer()}
