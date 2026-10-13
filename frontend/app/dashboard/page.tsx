@@ -1,5 +1,6 @@
-import React from 'react';
-import type { Metadata } from 'next';
+'use client';
+
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { 
   Car, 
@@ -8,147 +9,228 @@ import {
   Truck, 
   ArrowRight, 
   Layers, 
-  ShieldCheck, 
-  Activity, 
-  Sparkles,
-  Compass
+  Grid2X2,
+  Maximize2,
+  ExternalLink,
+  ChevronRight,
+  ShieldCheck,
+  Zap,
+  Activity
 } from 'lucide-react';
+import { EVOwner3DExperience } from '../../components/dashboards/EVOwner3DExperience';
+import { ManufacturerDashboard } from '../../components/dashboards/ManufacturerDashboard';
+import { StationOwnerDashboard } from '../../components/dashboards/StationOwnerDashboard';
+import { RescueOperatorDashboard } from '../../components/dashboards/RescueOperatorDashboard';
 
-export const metadata: Metadata = {
-  title: 'EVNEXUS Portals — Multi-Stakeholder Workspaces',
-  description: 'Choose your role-based workspace: EV Owner 3D Drive, OEM Analytics, Station Operator P&L, or Rescue & Tow Command.',
-};
-
-export default function DashboardLandingPage() {
-  const dashboards = [
-    {
-      title: 'EV Vehicle Owner',
-      subtitle: '3D Driving Environment & Personal Telemetry',
-      href: '/dashboard/owner',
-      icon: Car,
-      color: 'blue',
-      badge: '3D DRIVE DEFAULT',
-      description: 'Full-screen 3D driving simulation with live SOC, estimated range, Margdarshak EV route guidance, nearby fast chargers, and 1-click SOS roadside towing.',
-      features: ['Immersive 3D Viewport', 'Margdarshak AI Routing', 'SOS Emergency Assistance', 'Live Tow Van Tracking'],
-    },
-    {
-      title: 'OEM Analytics',
-      subtitle: 'Tata Motors EV Fleet Intelligence',
-      href: '/dashboard/oem',
-      icon: Building2,
-      color: 'indigo',
-      badge: 'PRIVACY PROTECTED',
-      description: 'Regional fleet adoption statistics, battery SOH degradation curves, roadside breakdown heatmaps, diurnal charging demand, and underserved corridor analysis.',
-      features: ['k-Anonymized Cohorts', 'Battery Health & SOH', 'Corridor Incident Heatmaps', 'Underserved Infrastructure'],
-    },
-    {
-      title: 'Station Operator',
-      subtitle: 'Commercial P&L & Expansion Planning',
-      href: '/dashboard/station',
-      icon: Fuel,
-      color: 'emerald',
-      badge: 'FINANCIAL INTELLIGENCE',
-      description: 'Comprehensive financial statement with gross revenue, wholesale power costs, OPEX, Net Operating Profit (EBITDA), multi-factor station rankings, and expansion candidate evaluation.',
-      features: ['P&L Statement & Margins', 'Revenue vs OPEX Breakdown', 'Multi-Factor Station Ranking', 'Expansion ROI & Payback'],
-    },
-    {
-      title: 'Rescue & Tow Command',
-      subtitle: 'Highway Dispatch & Multi-Incident Queue',
-      href: '/dashboard/rescue',
-      icon: Truck,
-      color: 'amber',
-      badge: 'ATOMIC DISPATCH',
-      description: 'Highway rescue incident queue, road danger and passenger vulnerability priority assessment, concurrency-safe atomic van assignment, and multi-stranded scenario simulation.',
-      features: ['2 Stranded EVs Concurrency Safe', 'Hazard & Lane Blocking Matrix', 'Queue Order & Realistic ETA', 'Automatic Van Reassignment'],
-    },
-  ];
+export default function DashboardPortalPage() {
+  const [activeTab, setActiveTab] = useState<'QUAD' | 'OWNER' | 'OEM' | 'STATION' | 'RESCUE'>('QUAD');
 
   return (
-    <main className="min-h-screen bg-slate-50 font-sans flex flex-col justify-between py-10 px-4 sm:px-8">
-      <div className="max-w-6xl mx-auto w-full">
-        {/* Top Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-8 mb-8 border-b border-slate-200 gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center text-white font-black text-sm shadow-md shadow-blue-500/20">
-                ⚡
-              </span>
-              <h1 className="text-xl font-black text-slate-900 tracking-tight font-mono">
+    <div className="min-h-screen bg-[#070b13] text-slate-100 flex flex-col font-sans select-none">
+      {/* Top Header / Switcher Bar */}
+      <header className="h-16 px-6 bg-[#0c1322]/95 backdrop-blur-xl border-b border-[#1c2842] flex items-center justify-between shrink-0 sticky top-0 z-50">
+        <div className="flex items-center gap-3">
+          <Link href="/" className="flex items-center gap-2 group">
+            <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center text-white font-black text-sm shadow-lg shadow-blue-600/40 group-hover:scale-105 transition-all">
+              ⚡
+            </div>
+            <div>
+              <span className="font-mono text-sm font-black tracking-wider text-white">
                 EVNEXUS
-              </h1>
-              <span className="text-slate-300">/</span>
-              <span className="text-xs font-bold text-slate-500 font-mono uppercase">
-                Stakeholder Workspaces
+              </span>
+              <span className="text-slate-500 mx-1.5 font-mono">/</span>
+              <span className="text-xs font-mono font-bold text-blue-400 uppercase">
+                Stakeholder Ecosystem
               </span>
             </div>
-            <p className="text-sm text-slate-600 mt-2">
-              Select your role to access dedicated telemetry, commercial analytics, or 3D operational control.
-            </p>
-          </div>
-
-          <Link
-            href="/"
-            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white border border-slate-200 hover:border-slate-300 text-slate-800 text-xs font-bold shadow-xs hover:shadow-sm transition-all"
-          >
-            <Layers className="w-4 h-4 text-blue-600" />
-            <span>Open Boisar 3D Digital Twin</span>
           </Link>
         </div>
 
-        {/* 4 Dashboard Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
-          {dashboards.map((dash) => {
-            const Icon = dash.icon;
-            return (
-              <Link
-                key={dash.href}
-                href={dash.href}
-                className="group p-6 rounded-3xl bg-white border border-slate-200 hover:border-blue-500 hover:shadow-xl transition-all duration-300 flex flex-col justify-between relative overflow-hidden"
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="w-12 h-12 rounded-2xl bg-slate-100 group-hover:bg-blue-600 flex items-center justify-center text-slate-700 group-hover:text-white transition-all shadow-xs">
-                      <Icon className="w-6 h-6" />
-                    </div>
+        {/* Tab View Selector matching the user's 4-panel image */}
+        <div className="flex items-center bg-[#131d33] p-1 rounded-2xl border border-white/10 gap-1">
+          <button
+            onClick={() => setActiveTab('QUAD')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'QUAD'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-600/40'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Grid2X2 className="w-3.5 h-3.5" />
+            <span>4-in-1 Quad View</span>
+          </button>
 
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-100 text-slate-600 uppercase">
-                      {dash.badge}
-                    </span>
-                  </div>
+          <button
+            onClick={() => setActiveTab('OWNER')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'OWNER'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Car className="w-3.5 h-3.5 text-blue-400" />
+            <span className="hidden sm:inline">1. EV Owner</span>
+          </button>
 
-                  <h2 className="text-lg font-black text-slate-900 tracking-tight group-hover:text-blue-600 transition-colors">
-                    {dash.title}
-                  </h2>
-                  <p className="text-xs font-semibold text-slate-400 font-mono mb-2">
-                    {dash.subtitle}
-                  </p>
-                  <p className="text-xs text-slate-600 leading-relaxed mb-4">
-                    {dash.description}
-                  </p>
+          <button
+            onClick={() => setActiveTab('OEM')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'OEM'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Building2 className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="hidden sm:inline">2. OEM Analytics</span>
+          </button>
 
-                  <div className="grid grid-cols-2 gap-1.5 pt-3 border-t border-slate-100 mb-4">
-                    {dash.features.map((f, i) => (
-                      <span key={i} className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                        {f}
-                      </span>
-                    ))}
-                  </div>
-                </div>
+          <button
+            onClick={() => setActiveTab('STATION')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'STATION'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Fuel className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden sm:inline">3. Station P&L</span>
+          </button>
 
-                <div className="flex items-center justify-between pt-3 border-t border-slate-100 text-xs font-bold text-blue-600 group-hover:translate-x-1 transition-transform">
-                  <span>Enter Workspace</span>
-                  <ArrowRight className="w-4 h-4" />
-                </div>
-              </Link>
-            );
-          })}
+          <button
+            onClick={() => setActiveTab('RESCUE')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'RESCUE'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Truck className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden sm:inline">4. Rescue Command</span>
+          </button>
         </div>
-      </div>
 
-      <footer className="max-w-6xl mx-auto w-full text-center text-xs text-slate-400 font-mono pt-6 border-t border-slate-200">
-        EVNEXUS Boisar Digital Twin · Real-Time Smart EV Charging Network & Urban Fleet Platform
-      </footer>
-    </main>
+        {/* Link back to Boisar 3D Digital Twin */}
+        <div className="flex items-center gap-2">
+          <Link
+            href="/"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-slate-300 hover:text-white transition-all"
+          >
+            <Layers className="w-3.5 h-3.5 text-blue-400" />
+            <span className="hidden md:inline">Open Boisar 3D Twin</span>
+          </Link>
+        </div>
+      </header>
+
+      {/* Main Content Area */}
+      <main className="flex-1 p-4 md:p-6 overflow-y-auto">
+        {/* ========================================================
+            CASE 1: QUAD 4-IN-1 VIEW (EXACTLY MATCHING USER'S IMAGE)
+           ======================================================== */}
+        {activeTab === 'QUAD' && (
+          <div className="max-w-[1920px] mx-auto space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              
+              {/* PANEL 1: EV OWNER DASHBOARD */}
+              <div className="rounded-3xl overflow-hidden border border-[#1e2a44] shadow-2xl flex flex-col bg-[#0b101c]">
+                <div className="h-600px relative">
+                  <div className="h-[560px] relative">
+                    <EVOwner3DExperience embedded={true} />
+                  </div>
+                </div>
+                <div className="py-2.5 px-4 bg-[#0a0f1a] border-t border-[#1e2a44] flex items-center justify-between text-xs font-mono font-bold text-slate-300">
+                  <span className="text-blue-400">1. EV OWNER DASHBOARD (In-Car 3D Driving View)</span>
+                  <Link
+                    href="/dashboard/owner"
+                    className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-white"
+                  >
+                    <span>Full Screen</span>
+                    <Maximize2 className="w-3 h-3" />
+                  </Link>
+                </div>
+              </div>
+
+              {/* PANEL 2: OEM / MANUFACTURER DASHBOARD */}
+              <div className="rounded-3xl overflow-hidden border border-[#1e2a44] shadow-2xl flex flex-col bg-white">
+                <div className="h-[560px] overflow-hidden">
+                  <ManufacturerDashboard embedded={true} />
+                </div>
+                <div className="py-2.5 px-4 bg-[#0a0f1a] border-t border-[#1e2a44] flex items-center justify-between text-xs font-mono font-bold text-slate-300">
+                  <span className="text-indigo-400">2. OEM / MANUFACTURER DASHBOARD (Tata Motors EV)</span>
+                  <Link
+                    href="/dashboard/oem"
+                    className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-white"
+                  >
+                    <span>Full Screen</span>
+                    <Maximize2 className="w-3 h-3" />
+                  </Link>
+                </div>
+              </div>
+
+              {/* PANEL 3: CHARGING STATION OPERATOR DASHBOARD */}
+              <div className="rounded-3xl overflow-hidden border border-[#1e2a44] shadow-2xl flex flex-col bg-white">
+                <div className="h-[560px] overflow-hidden">
+                  <StationOwnerDashboard embedded={true} />
+                </div>
+                <div className="py-2.5 px-4 bg-[#0a0f1a] border-t border-[#1e2a44] flex items-center justify-between text-xs font-mono font-bold text-slate-300">
+                  <span className="text-emerald-400">3. CHARGING STATION OPERATOR DASHBOARD (Profitability & Expansion)</span>
+                  <Link
+                    href="/dashboard/station"
+                    className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-white"
+                  >
+                    <span>Full Screen</span>
+                    <Maximize2 className="w-3 h-3" />
+                  </Link>
+                </div>
+              </div>
+
+              {/* PANEL 4: RESCUE & TOW OPERATOR DASHBOARD */}
+              <div className="rounded-3xl overflow-hidden border border-[#1e2a44] shadow-2xl flex flex-col bg-white">
+                <div className="h-[560px] overflow-hidden">
+                  <RescueOperatorDashboard embedded={true} />
+                </div>
+                <div className="py-2.5 px-4 bg-[#0a0f1a] border-t border-[#1e2a44] flex items-center justify-between text-xs font-mono font-bold text-slate-300">
+                  <span className="text-amber-400">4. RESCUE & TOW OPERATOR DASHBOARD (Incident Management)</span>
+                  <Link
+                    href="/dashboard/rescue"
+                    className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-white"
+                  >
+                    <span>Full Screen</span>
+                    <Maximize2 className="w-3 h-3" />
+                  </Link>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================
+            CASE 2: INDIVIDUAL TAB VIEWS
+           ======================================================== */}
+        {activeTab === 'OWNER' && (
+          <div className="h-[calc(100vh-6rem)] rounded-3xl overflow-hidden border border-[#1e2a44] shadow-2xl">
+            <EVOwner3DExperience />
+          </div>
+        )}
+
+        {activeTab === 'OEM' && (
+          <div className="h-[calc(100vh-6rem)] rounded-3xl overflow-hidden border border-[#1e2a44] shadow-2xl">
+            <ManufacturerDashboard />
+          </div>
+        )}
+
+        {activeTab === 'STATION' && (
+          <div className="h-[calc(100vh-6rem)] rounded-3xl overflow-hidden border border-[#1e2a44] shadow-2xl">
+            <StationOwnerDashboard />
+          </div>
+        )}
+
+        {activeTab === 'RESCUE' && (
+          <div className="h-[calc(100vh-6rem)] rounded-3xl overflow-hidden border border-[#1e2a44] shadow-2xl">
+            <RescueOperatorDashboard />
+          </div>
+        )}
+      </main>
+    </div>
   );
 }

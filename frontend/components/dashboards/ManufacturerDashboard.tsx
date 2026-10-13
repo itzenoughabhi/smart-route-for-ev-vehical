@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useDigitalTwinStore } from '../../store/useDigitalTwinStore';
+import React, { useState } from 'react';
+import Link from 'next/link';
 import { 
   Building2, 
   ShieldCheck, 
@@ -15,344 +15,442 @@ import {
   TrendingUp, 
   Globe2, 
   Cpu,
-  Lock
+  Lock,
+  Home,
+  Car,
+  Activity,
+  FileText,
+  Settings,
+  ChevronDown,
+  Calendar,
+  Wrench,
+  Flame,
+  CheckCircle2,
+  PieChart as PieIcon
 } from 'lucide-react';
-import { ManufacturerFleetAnalytics } from '../../types';
 
-export function ManufacturerDashboard() {
-  const currentUser = useDigitalTwinStore((s) => s.currentUser);
-  const manufacturerAnalytics = useDigitalTwinStore((s) => s.manufacturerAnalytics);
-  const setManufacturerAnalytics = useDigitalTwinStore((s) => s.setManufacturerAnalytics);
+interface ManufacturerDashboardProps {
+  embedded?: boolean;
+}
 
-  const [selectedBrand, setSelectedBrand] = useState('Tata Motors EV');
-  const [selectedTimePeriod, setSelectedTimePeriod] = useState('LAST_30_DAYS');
-  const [selectedModelFilter, setSelectedModelFilter] = useState('ALL');
-  const [selectedRegionFilter, setSelectedRegionFilter] = useState('ALL');
-  const [loading, setLoading] = useState(false);
+export function ManufacturerDashboard({ embedded = false }: ManufacturerDashboardProps) {
+  const [activeMenu, setActiveMenu] = useState('Overview');
+  const [timeRange, setTimeRange] = useState('Last 6 Months');
+  const [regionFilter, setRegionFilter] = useState('All India');
+  const [hotspotView, setHotspotView] = useState<'Incidents' | 'Heatmap'>('Incidents');
 
-  useEffect(() => {
-    const fetchAnalytics = async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(`http://localhost:4000/api/manufacturer/analytics?brand=${encodeURIComponent(selectedBrand)}&role=EV_MANUFACTURER`).catch(() => null);
-        if (res && res.ok) {
-          const data = await res.json();
-          setManufacturerAnalytics(data);
-        } else {
-          // Fallback demo data if offline
-          const fallbackData: ManufacturerFleetAnalytics = {
-            brand: selectedBrand,
-            anonymizedFleetCount: 4550,
-            regionalAdoption: [
-              {
-                region: 'Boisar Town & Industrial Corridor',
-                totalRegisteredEVs: 1420,
-                growthRateYoY: 34.2,
-                brandMarketSharePct: { 'Tata Motors EV': 48.5, 'Mahindra EV': 18.2, 'BYD': 12.4, 'Others': 20.9 },
-                topModels: [
-                  { model: 'Tata Nexon EV', count: 430, sharePct: 30.2 },
-                  { model: 'Tata Tiago EV', count: 260, sharePct: 18.3 },
-                ],
-              },
-              {
-                region: 'Palghar Highway (SH-40)',
-                totalRegisteredEVs: 980,
-                growthRateYoY: 28.6,
-                brandMarketSharePct: { 'Tata Motors EV': 52.0, 'Mahindra EV': 16.0, 'Others': 32.0 },
-                topModels: [
-                  { model: 'Tata Nexon EV', count: 320, sharePct: 32.6 },
-                  { model: 'Tata Punch EV', count: 190, sharePct: 19.4 },
-                ],
-              },
-            ],
-            batteryHealthByModel: [
-              {
-                model: 'Tata Nexon EV (40.5 kWh LFP)',
-                sampleSize: 740,
-                avgSOHPct: 96.8,
-                avgRangeRetentionPct: 94.5,
-                degradationPer10kKmPct: 0.38,
-                fastChargeExposurePct: 62.0,
-                avgBatteryTempCelsius: 32.4,
-              },
-              {
-                model: 'Tata Tiago EV (24 kWh LFP)',
-                sampleSize: 420,
-                avgSOHPct: 97.4,
-                avgRangeRetentionPct: 95.8,
-                degradationPer10kKmPct: 0.32,
-                fastChargeExposurePct: 38.5,
-                avgBatteryTempCelsius: 30.8,
-              },
-            ],
-            incidentHotspots: [
-              {
-                corridorName: 'SH-40 Boisar–Palghar Highway (Umroli Junction)',
-                region: 'Palghar Corridor',
-                incidentCount: 14,
-                primaryCause: 'Depleted State of Charge before reaching rural charging corridor',
-                avgResponseTimeMin: 14.2,
-                severityDistribution: { critical: 4, warning: 8, info: 2 },
-              },
-            ],
-            chargingPatterns: [
-              { hourOfDay: 6, avgSessionDurationMin: 22, avgEnergyDeliveredKwh: 24.0, preferredChargerType: '150kW_DC', avgStartingSocPct: 28, avgEndingSocPct: 80 },
-              { hourOfDay: 12, avgSessionDurationMin: 32, avgEnergyDeliveredKwh: 36.2, preferredChargerType: '150kW_DC', avgStartingSocPct: 18, avgEndingSocPct: 82 },
-              { hourOfDay: 18, avgSessionDurationMin: 36, avgEnergyDeliveredKwh: 42.0, preferredChargerType: '350kW_DC', avgStartingSocPct: 14, avgEndingSocPct: 85 },
-            ],
-            underservedZones: [
-              {
-                zone: 'Tarapur MIDC Phase II',
-                evDensity: 'Very High (Commercial Logistics)',
-                chargerGap: 'Deficit of 8 DC Fast Bays within 4km',
-                priority: 'URGENT',
-              },
-            ],
-            privacyNotice: '🔒 Privacy Protected: All telemetry metrics are strictly aggregated with k-anonymity (k >= 5). Individual owner names, GPS waypoints, private journey logs, and telephone numbers are stripped per Indian DPDP & Global Automotive Privacy standards.',
-          };
-          setManufacturerAnalytics(fallbackData);
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
+  const kpis = [
+    { title: 'Total Vehicles', value: '25,480', delta: '+ 18%', deltaType: 'positive', icon: Car, iconColor: 'text-blue-500' },
+    { title: 'Avg. Vehicle Health', value: '92.4%', delta: '+ 2.1%', deltaType: 'positive', icon: Activity, iconColor: 'text-emerald-500' },
+    { title: 'Total Incidents', value: '3,240', delta: '- 5%', deltaType: 'positive', icon: AlertTriangle, iconColor: 'text-red-500' },
+    { title: 'Service Requests', value: '1,820', delta: '+ 12%', deltaType: 'neutral', icon: Wrench, iconColor: 'text-indigo-500' },
+  ];
 
-    fetchAnalytics();
-  }, [selectedBrand, setManufacturerAnalytics]);
-
-  const analytics = manufacturerAnalytics;
+  const models = [
+    { name: 'Tata Tiago EV', share: '42%', color: '#3b82f6' },
+    { name: 'Tata Nexon EV', share: '28%', color: '#06b6d4' },
+    { name: 'Tata Punch EV', share: '18%', color: '#10b981' },
+    { name: 'Tata Curvv EV', share: '8%', color: '#8b5cf6' },
+    { name: 'Others', share: '4%', color: '#64748b' },
+  ];
 
   return (
-    <div className="flex flex-col h-full bg-slate-50/70 overflow-y-auto p-6 font-sans">
-      {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 mb-6 border-b border-slate-200 gap-4">
+    <div className={`w-full ${embedded ? 'h-full min-h-[520px]' : 'h-screen'} bg-[#f1f5f9] text-slate-800 flex overflow-hidden font-sans select-none`}>
+      {/* ========================================================
+          1. LEFT DARK NAVY SIDEBAR
+         ======================================================== */}
+      <aside className="w-16 md:w-56 bg-[#0c1322] border-r border-[#192339] flex flex-col justify-between shrink-0 z-30 transition-all">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700 uppercase tracking-wider font-mono">
-              OEM Analytics Portal
-            </span>
-            <span className="text-slate-400 text-xs">·</span>
-            <span className="text-xs font-semibold text-slate-600 font-mono">Aggregated Telemetry Engine</span>
-          </div>
-          <h2 className="text-xl font-black text-slate-900 tracking-tight mt-1 flex items-center gap-2">
-            {currentUser?.organization || 'Tata Motors Electric Mobility Division'}
-          </h2>
-          <p className="text-xs text-slate-500">
-            Regional Fleet Diagnostics, Range Retention, Incident Heatmaps & Charging Demand
-          </p>
-        </div>
-
-        {/* Brand & Filter Controls */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <select
-            value={selectedBrand}
-            onChange={(e) => setSelectedBrand(e.target.value)}
-            className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-800 outline-none shadow-sm font-mono"
-          >
-            <option value="Tata Motors EV">Tata Motors EV</option>
-            <option value="Mahindra EV">Mahindra Electric</option>
-            <option value="BYD">BYD Auto</option>
-            <option value="Hyundai">Hyundai EV</option>
-          </select>
-
-          <select
-            value={selectedTimePeriod}
-            onChange={(e) => setSelectedTimePeriod(e.target.value)}
-            className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-medium text-slate-700 outline-none shadow-sm font-mono"
-          >
-            <option value="LAST_7_DAYS">Last 7 Days</option>
-            <option value="LAST_30_DAYS">Last 30 Days</option>
-            <option value="LAST_90_DAYS">Last Quarter (Q3)</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Privacy Safeguard Banner (Strict DPDP Compliance) */}
-      <div className="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-200/80 mb-6 flex items-start gap-3 text-xs text-indigo-900">
-        <Lock className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-        <div>
-          <span className="font-bold block">Privacy Shield & Data Anonymization Active (DPDP Act / GDPR)</span>
-          <p className="text-[11px] text-indigo-800 leading-relaxed mt-0.5">
-            {analytics?.privacyNotice || 'Individual vehicle journey trails, registered driver names, and live street addresses are stripped. Telemetry is aggregated into cohorts (k ≥ 5) for battery degradation, breakdown heatmaps, and regional adoption forecasting.'}
-          </p>
-        </div>
-      </div>
-
-      {/* KPI Overview Strip */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
-          <span className="text-[10px] font-mono text-slate-400 block">REGIONAL BRAND FLEET</span>
-          <span className="text-xl font-black text-slate-900 font-mono">
-            {analytics?.anonymizedFleetCount.toLocaleString() || '4,550'}
-          </span>
-          <span className="text-[11px] text-emerald-600 font-bold flex items-center gap-1 mt-1 font-mono">
-            <TrendingUp className="w-3 h-3" /> +34.2% YoY Growth
-          </span>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
-          <span className="text-[10px] font-mono text-slate-400 block">AVG BATTERY SOH</span>
-          <span className="text-xl font-black text-emerald-600 font-mono">97.1%</span>
-          <span className="text-[11px] text-slate-500 font-mono mt-1 block">
-            0.34% drop / 10k km
-          </span>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
-          <span className="text-[10px] font-mono text-slate-400 block">MARKET SHARE (BOISAR)</span>
-          <span className="text-xl font-black text-blue-600 font-mono">48.5%</span>
-          <span className="text-[11px] text-slate-500 font-mono mt-1 block">
-            Rank #1 in district
-          </span>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
-          <span className="text-[10px] font-mono text-slate-400 block">ROADSIDE ASSIST INCIDENTS</span>
-          <span className="text-xl font-black text-amber-600 font-mono">14 Cases</span>
-          <span className="text-[11px] text-slate-500 font-mono mt-1 block">
-            Avg response: 14.2 min
-          </span>
-        </div>
-      </div>
-
-      {/* Main Analytics Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        {/* Battery Health & Range Degradation Curves */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <BatteryMedium className="w-4 h-4 text-emerald-600" />
-              <h3 className="text-sm font-black text-slate-900">Aggregated Battery Health & Range Retention</h3>
+          {/* Logo Brand */}
+          <div className="h-16 flex items-center px-4 gap-2.5 border-b border-[#192339]">
+            <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center text-white font-black text-sm shadow-lg shadow-blue-600/30 shrink-0">
+              ⚡
             </div>
-            <span className="text-[10px] font-mono text-slate-400">Cohort Sample Size</span>
+            <div className="hidden md:block">
+              <span className="font-mono text-sm font-black tracking-wider text-white">
+                EVNEXUS
+              </span>
+              <span className="block text-[10px] text-blue-400 font-mono -mt-0.5">OEM Analytics</span>
+            </div>
           </div>
 
-          <div className="space-y-4">
-            {analytics?.batteryHealthByModel.map((bh, idx) => (
-              <div key={idx} className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 text-xs">
-                <div className="flex items-center justify-between mb-1.5 font-mono">
-                  <span className="font-bold text-slate-900">{bh.model}</span>
-                  <span className="text-emerald-700 font-bold">{bh.avgSOHPct}% SOH</span>
-                </div>
+          {/* Navigation Links */}
+          <nav className="p-3 space-y-1">
+            {[
+              { id: 'Overview', label: 'Overview', icon: Home },
+              { id: 'Vehicles', label: 'Vehicle Analytics', icon: Car },
+              { id: 'Battery', label: 'Battery Performance', icon: BatteryMedium },
+              { id: 'Breakdown', label: 'Breakdown Insights', icon: AlertTriangle },
+              { id: 'Network', label: 'Charging Network', icon: Zap },
+              { id: 'Regional', label: 'Regional Analysis', icon: Globe2 },
+              { id: 'Fleet', label: 'Fleet Trends', icon: TrendingUp },
+              { id: 'Reports', label: 'Reports', icon: FileText },
+              { id: 'Settings', label: 'Settings', icon: Settings },
+            ].map((item) => {
+              const Icon = item.icon;
+              const isActive = activeMenu === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveMenu(item.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                    isActive
+                      ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                      : 'text-slate-400 hover:text-white hover:bg-[#162137]'
+                  }`}
+                  title={item.label}
+                >
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span className="hidden md:inline truncate">{item.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+        </div>
 
-                <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden mb-2">
-                  <div
-                    className="h-full bg-emerald-500 rounded-full"
-                    style={{ width: `${bh.avgSOHPct}%` }}
+        {/* k-Anonymized Privacy Badge in Sidebar */}
+        <div className="p-3 border-t border-[#192339] hidden md:block">
+          <div className="p-2.5 rounded-xl bg-[#131b2e] border border-blue-500/20 text-[11px]">
+            <div className="flex items-center gap-1.5 text-blue-400 font-bold mb-1">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>k-Anonymized</span>
+            </div>
+            <p className="text-[10px] text-slate-400 leading-tight">
+              Cohort size k ≥ 10. Individual driver PII stripped.
+            </p>
+          </div>
+        </div>
+      </aside>
+
+      {/* ========================================================
+          2. MAIN CONTENT AREA
+         ======================================================== */}
+      <div className="flex-1 flex flex-col overflow-y-auto bg-[#f8fafc]">
+        {/* Top Header Bar */}
+        <header className="h-16 px-6 bg-white border-b border-slate-200 flex items-center justify-between shrink-0 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center font-black text-blue-600 text-sm">
+              T
+            </div>
+            <div>
+              <h1 className="text-base font-black text-slate-900 tracking-tight flex items-center gap-2">
+                Tata Motors EV
+                <span className="text-xs font-semibold text-slate-400 font-mono hidden sm:inline">
+                  Manufacturer Analytics Dashboard
+                </span>
+              </h1>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            {/* Filter: Date */}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200/80 border border-slate-200 text-xs font-bold text-slate-700 cursor-pointer">
+              <Calendar className="w-3.5 h-3.5 text-slate-500" />
+              <span>{timeRange}</span>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            </div>
+
+            {/* Filter: Region */}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200/80 border border-slate-200 text-xs font-bold text-slate-700 cursor-pointer">
+              <Globe2 className="w-3.5 h-3.5 text-slate-500" />
+              <span>{regionFilter}</span>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            </div>
+
+            {/* Avatar */}
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 border border-white flex items-center justify-center text-white font-bold text-xs shadow-xs ml-1">
+              TM
+            </div>
+          </div>
+        </header>
+
+        {/* Dashboard Body Grid */}
+        <main className="p-6 space-y-6">
+          {/* 4 Top KPI Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {kpis.map((kpi, idx) => {
+              const Icon = kpi.icon;
+              return (
+                <div key={idx} className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-slate-500">{kpi.title}</span>
+                    <div className={`p-1.5 rounded-lg bg-slate-50 ${kpi.iconColor}`}>
+                      <Icon className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <div className="text-2xl font-black text-slate-900 tracking-tight font-sans">
+                    {kpi.value}
+                  </div>
+                  <div className="flex items-center gap-1 mt-1">
+                    <span className={`text-xs font-bold ${
+                      kpi.deltaType === 'positive' ? 'text-emerald-600' : 'text-blue-600'
+                    }`}>
+                      {kpi.delta}
+                    </span>
+                    <span className="text-[11px] text-slate-400">vs last period</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Middle Row: Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* EV Adoption Trend (Line Chart) */}
+            <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">EV Adoption Trend</h3>
+                  <p className="text-xs text-slate-400 font-mono">Monthly New Fleet Registrations</p>
+                </div>
+                <span className="text-xs font-mono font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
+                  25,480 Active
+                </span>
+              </div>
+
+              {/* Chart SVG */}
+              <div className="w-full h-48 relative flex items-end">
+                <svg className="w-full h-44 overflow-visible" viewBox="0 0 500 150">
+                  {/* Grid Lines */}
+                  <line x1="0" y1="30" x2="500" y2="30" stroke="#f1f5f9" strokeWidth="1" />
+                  <line x1="0" y1="70" x2="500" y2="70" stroke="#f1f5f9" strokeWidth="1" />
+                  <line x1="0" y1="110" x2="500" y2="110" stroke="#f1f5f9" strokeWidth="1" />
+                  
+                  {/* Gradient fill */}
+                  <defs>
+                    <linearGradient id="adoptionGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.25" />
+                      <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.0" />
+                    </linearGradient>
+                  </defs>
+
+                  {/* Area */}
+                  <path
+                    d="M 20 120 Q 100 110, 180 85 T 340 60 T 480 20 L 480 140 L 20 140 Z"
+                    fill="url(#adoptionGrad)"
                   />
-                </div>
+                  {/* Line */}
+                  <path
+                    d="M 20 120 Q 100 110, 180 85 T 340 60 T 480 20"
+                    fill="none"
+                    stroke="#2563eb"
+                    strokeWidth="3.5"
+                    strokeLinecap="round"
+                  />
 
-                <div className="grid grid-cols-3 gap-2 text-[10px] font-mono text-slate-500 pt-1 border-t border-slate-200/60">
-                  <span>Sample: {bh.sampleSize} EVs</span>
-                  <span>DC Fast Exposure: {bh.fastChargeExposurePct}%</span>
-                  <span>Avg Pack Temp: {bh.avgBatteryTempCelsius}°C</span>
-                </div>
+                  {/* Data Points */}
+                  {[
+                    { cx: 20, cy: 120 },
+                    { cx: 100, cy: 110 },
+                    { cx: 180, cy: 85 },
+                    { cx: 260, cy: 75 },
+                    { cx: 340, cy: 60 },
+                    { cx: 420, cy: 40 },
+                    { cx: 480, cy: 20 },
+                  ].map((pt, i) => (
+                    <circle key={i} cx={pt.cx} cy={pt.cy} r="4" fill="#ffffff" stroke="#2563eb" strokeWidth="2.5" />
+                  ))}
+                </svg>
               </div>
-            ))}
-          </div>
-        </div>
 
-        {/* Breakdown Locations & Incident Hotspots */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-600" />
-              <h3 className="text-sm font-black text-slate-900">Breakdown Hotspots & Rescue Demand</h3>
+              {/* Month Labels */}
+              <div className="flex justify-between text-[11px] font-mono font-semibold text-slate-400 mt-2 px-2">
+                <span>Apr</span>
+                <span>May</span>
+                <span>Jun</span>
+                <span>Jul</span>
+                <span>Aug</span>
+                <span>Sep</span>
+              </div>
             </div>
-            <span className="text-[10px] font-mono text-slate-400">Incident Frequency</span>
-          </div>
 
-          <div className="space-y-3">
-            {analytics?.incidentHotspots.map((hs, idx) => (
-              <div key={idx} className="p-3.5 rounded-xl bg-amber-50/50 border border-amber-200/60 text-xs">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-bold text-slate-900">{hs.corridorName}</span>
-                  <span className="font-mono font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full text-[10px]">
-                    {hs.incidentCount} Incidents
+            {/* Battery Performance (Dual Bar & Line Chart) */}
+            <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">Battery Performance</h3>
+                  <p className="text-xs text-slate-400 font-mono">Range Retention vs Energy Efficiency</p>
+                </div>
+                <div className="flex items-center gap-3 text-[11px] font-mono">
+                  <span className="flex items-center gap-1.5 text-blue-600 font-bold">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-blue-500" /> Avg. Range (km)
+                  </span>
+                  <span className="flex items-center gap-1.5 text-emerald-600 font-bold">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Energy Efficiency
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-600 mb-2">{hs.primaryCause}</p>
+              </div>
 
-                <div className="flex items-center justify-between text-[10px] font-mono text-slate-500 pt-1 border-t border-amber-200/40">
-                  <span>Region: {hs.region}</span>
-                  <span>Avg Rescue ETA: {hs.avgResponseTimeMin}m</span>
-                  <span className="text-red-700 font-bold">{hs.severityDistribution.critical} Critical Blockages</span>
+              {/* Bar and Line SVG */}
+              <div className="w-full h-48 relative flex items-end">
+                <svg className="w-full h-44 overflow-visible" viewBox="0 0 500 150">
+                  <line x1="0" y1="35" x2="500" y2="35" stroke="#f1f5f9" strokeWidth="1" />
+                  <line x1="0" y1="75" x2="500" y2="75" stroke="#f1f5f9" strokeWidth="1" />
+                  <line x1="0" y1="115" x2="500" y2="115" stroke="#f1f5f9" strokeWidth="1" />
+
+                  {/* Bars */}
+                  {[
+                    { x: 30, h: 60 },
+                    { x: 110, h: 75 },
+                    { x: 190, h: 80 },
+                    { x: 270, h: 90 },
+                    { x: 350, h: 98 },
+                    { x: 430, h: 108 },
+                  ].map((bar, i) => (
+                    <rect
+                      key={i}
+                      x={bar.x}
+                      y={140 - bar.h}
+                      width="26"
+                      height={bar.h}
+                      rx="4"
+                      fill="#3b82f6"
+                    />
+                  ))}
+
+                  {/* Efficiency Line */}
+                  <path
+                    d="M 43 90 L 123 80 L 203 72 L 283 62 L 363 50 L 443 38"
+                    fill="none"
+                    stroke="#10b981"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                  />
+                  {[43, 123, 203, 283, 363, 443].map((cx, i) => {
+                    const cy = [90, 80, 72, 62, 50, 38][i];
+                    return (
+                      <circle key={i} cx={cx} cy={cy} r="3.5" fill="#ffffff" stroke="#10b981" strokeWidth="2.5" />
+                    );
+                  })}
+                </svg>
+              </div>
+
+              {/* Month Labels */}
+              <div className="flex justify-between text-[11px] font-mono font-semibold text-slate-400 mt-2 px-6">
+                <span>Apr</span>
+                <span>May</span>
+                <span>Jun</span>
+                <span>Jul</span>
+                <span>Aug</span>
+                <span>Sep</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom Row: Breakdown Hotspots & Vehicle Model Distribution */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Breakdown Hotspots Map Card */}
+            <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">Breakdown Hotspots</h3>
+                  <p className="text-xs text-slate-400 font-mono">Geographic Roadside Incident Density</p>
+                </div>
+                <div className="flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200 text-xs font-bold">
+                  <button
+                    onClick={() => setHotspotView('Incidents')}
+                    className={`px-3 py-1 rounded-lg transition-all ${
+                      hotspotView === 'Incidents' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600'
+                    }`}
+                  >
+                    Incidents
+                  </button>
+                  <button
+                    onClick={() => setHotspotView('Heatmap')}
+                    className={`px-3 py-1 rounded-lg transition-all ${
+                      hotspotView === 'Heatmap' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600'
+                    }`}
+                  >
+                    Heatmap
+                  </button>
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
-      </div>
 
-      {/* Regional Adoption Trends & Charging Infrastructure Coverage */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Regional Market Share & Adoption */}
-        <div className="lg:col-span-2 bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-blue-600" />
-              <h3 className="text-sm font-black text-slate-900">Regional EV Adoption & Brand Share</h3>
+              {/* Dark Map Simulation */}
+              <div className="w-full h-56 rounded-2xl bg-[#090f1d] border border-[#16233c] relative overflow-hidden flex items-center justify-center">
+                {/* SVG Roads & Map Backdrop */}
+                <svg className="absolute inset-0 w-full h-full opacity-40">
+                  <path d="M 20 80 Q 150 120, 280 60 T 450 140" fill="none" stroke="#2563eb" strokeWidth="4" />
+                  <path d="M 120 20 Q 200 120, 320 200" fill="none" stroke="#38bdf8" strokeWidth="2.5" />
+                  <path d="M 40 180 L 400 40" fill="none" stroke="#1e293b" strokeWidth="2" strokeDasharray="6 4" />
+                </svg>
+
+                {/* Region Labels */}
+                <span className="absolute top-12 left-14 text-slate-300 font-mono text-xs font-bold tracking-wider">
+                  Boisar
+                </span>
+                <span className="absolute bottom-10 left-24 text-slate-400 font-mono text-xs font-bold">
+                  Pasthal
+                </span>
+                <span className="absolute bottom-8 right-32 text-slate-400 font-mono text-xs font-bold">
+                  Palghar
+                </span>
+
+                {/* Hotspot Markers */}
+                {[
+                  { top: '35%', left: '38%', count: '14' },
+                  { top: '55%', left: '46%', count: '8' },
+                  { top: '48%', left: '65%', count: '12' },
+                  { top: '70%', left: '55%', count: '6' },
+                ].map((spot, i) => (
+                  <div
+                    key={i}
+                    style={{ top: spot.top, left: spot.left }}
+                    className="absolute -translate-x-1/2 -translate-y-1/2 flex items-center justify-center cursor-pointer group"
+                  >
+                    <span className="w-8 h-8 rounded-full bg-red-500/30 animate-ping absolute" />
+                    <div className="w-6 h-6 rounded-full bg-red-600 border-2 border-white flex items-center justify-center text-white text-[10px] font-black shadow-lg shadow-red-600/50">
+                      {spot.count}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-            <span className="text-[10px] font-mono text-slate-400">Sub-District Breakdown</span>
-          </div>
 
-          <div className="space-y-4">
-            {analytics?.regionalAdoption.map((ra, idx) => (
-              <div key={idx} className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 text-xs">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-black text-slate-900 font-mono">{ra.region}</span>
-                  <span className="font-mono text-blue-700 font-bold">{ra.totalRegisteredEVs} Active EVs</span>
+            {/* Vehicle Model Distribution Donut Chart */}
+            <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between">
+              <div>
+                <h3 className="text-sm font-black text-slate-900">Vehicle Model Distribution</h3>
+                <p className="text-xs text-slate-400 font-mono">Share of 25,480 Active Fleet</p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center my-4">
+                {/* Donut Chart SVG */}
+                <div className="relative w-40 h-40 mx-auto flex items-center justify-center">
+                  <svg className="w-40 h-40 -rotate-90" viewBox="0 0 42 42">
+                    <circle cx="21" cy="21" r="15.9" fill="transparent" stroke="#3b82f6" strokeWidth="5" strokeDasharray="42 58" strokeDashoffset="0" />
+                    <circle cx="21" cy="21" r="15.9" fill="transparent" stroke="#06b6d4" strokeWidth="5" strokeDasharray="28 72" strokeDashoffset="-42" />
+                    <circle cx="21" cy="21" r="15.9" fill="transparent" stroke="#10b981" strokeWidth="5" strokeDasharray="18 82" strokeDashoffset="-70" />
+                    <circle cx="21" cy="21" r="15.9" fill="transparent" stroke="#8b5cf6" strokeWidth="5" strokeDasharray="8 92" strokeDashoffset="-88" />
+                    <circle cx="21" cy="21" r="15.9" fill="transparent" stroke="#64748b" strokeWidth="5" strokeDasharray="4 96" strokeDashoffset="-96" />
+                  </svg>
+                  <div className="absolute text-center">
+                    <span className="font-mono text-base font-black text-slate-900 block leading-tight">25,480</span>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase font-mono">Vehicles</span>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-3 text-[11px] font-mono mb-2">
-                  <span className="text-slate-500">OEM Market Share:</span>
-                  {Object.entries(ra.brandMarketSharePct).map(([br, pct]) => (
-                    <span key={br} className="font-bold text-slate-700">
-                      {br}: <strong className="text-indigo-600">{pct}%</strong>
-                    </span>
+                {/* Legend */}
+                <div className="space-y-2 text-xs">
+                  {models.map((m, i) => (
+                    <div key={i} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: m.color }} />
+                        <span className="font-semibold text-slate-700">{m.name}</span>
+                      </div>
+                      <span className="font-mono font-bold text-slate-900">{m.share}</span>
+                    </div>
                   ))}
                 </div>
-
-                <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500">
-                  <span className="font-bold">Top Models:</span>
-                  {ra.topModels.map((tm, tIdx) => (
-                    <span key={tIdx} className="bg-white px-2 py-0.5 rounded border text-slate-600">
-                      {tm.model} ({tm.count} units · {tm.sharePct}%)
-                    </span>
-                  ))}
-                </div>
               </div>
-            ))}
-          </div>
-        </div>
 
-        {/* Underserved Charging Gaps */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Zap className="w-4 h-4 text-indigo-600" />
-              <h3 className="text-sm font-black text-slate-900">Underserved Zones</h3>
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                <span>Top Regional Seller:</span>
+                <span className="font-bold text-blue-600">Tata Tiago EV (10,700 units)</span>
+              </div>
             </div>
-            <span className="text-[10px] font-mono text-slate-400">OEM Priority</span>
           </div>
-
-          <div className="space-y-3">
-            {analytics?.underservedZones.map((uz, idx) => (
-              <div key={idx} className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-bold text-slate-900">{uz.zone}</span>
-                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold font-mono ${
-                    uz.priority === 'URGENT' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
-                  }`}>
-                    {uz.priority}
-                  </span>
-                </div>
-                <div className="text-[11px] text-slate-600 font-medium">{uz.chargerGap}</div>
-                <div className="text-[10px] text-slate-400 font-mono mt-1">Density: {uz.evDensity}</div>
-              </div>
-            ))}
-          </div>
-        </div>
+        </main>
       </div>
     </div>
   );

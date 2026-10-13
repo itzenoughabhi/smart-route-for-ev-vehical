@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useDigitalTwinStore } from '../../store/useDigitalTwinStore';
+import React, { useState } from 'react';
+import Image from 'next/image';
 import { 
   Building, 
   DollarSign, 
@@ -20,501 +20,439 @@ import {
   ArrowUpRight,
   Percent,
   SlidersHorizontal,
-  Compass
+  Compass,
+  Home,
+  Activity,
+  Calendar,
+  ChevronDown,
+  BarChart3,
+  Flame,
+  Settings,
+  ShieldCheck,
+  CheckCircle2
 } from 'lucide-react';
-import { StationFinancialMetric, ExpansionCandidate, StationOwnerAlert } from '../../types';
 
-export function StationOwnerDashboard() {
-  const currentUser = useDigitalTwinStore((s) => s.currentUser);
-  const stations = useDigitalTwinStore((s) => s.stations);
-  const stationFinancials = useDigitalTwinStore((s) => s.stationFinancials);
-  const setStationFinancials = useDigitalTwinStore((s) => s.setStationFinancials);
-  const expansionCandidates = useDigitalTwinStore((s) => s.expansionCandidates);
-  const setExpansionCandidates = useDigitalTwinStore((s) => s.setExpansionCandidates);
-  const stationAlerts = useDigitalTwinStore((s) => s.stationAlerts);
-  const setStationAlerts = useDigitalTwinStore((s) => s.setStationAlerts);
-  const selectStation = useDigitalTwinStore((s) => s.selectStation);
+interface StationOwnerDashboardProps {
+  embedded?: boolean;
+}
 
-  const [activeTab, setActiveTab] = useState<'ANALYTICS' | 'RANKING' | 'EXPANSION' | 'ALERTS'>('ANALYTICS');
-  const [selectedStationId, setSelectedStationId] = useState<string>('');
-  const [showAssumptionsModal, setShowAssumptionsModal] = useState(false);
-  const [compareCandidateIds, setCompareCandidateIds] = useState<string[]>(['exp-midc-phase2', 'exp-palghar-bypass']);
+export function StationOwnerDashboard({ embedded = false }: StationOwnerDashboardProps) {
+  const [activeMenu, setActiveMenu] = useState('Overview');
+  const [timeRange, setTimeRange] = useState('Last 30 Days');
+  const [investedCandidate, setInvestedCandidate] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchFinancials = async () => {
-      try {
-        const [finRes, expRes, alRes] = await Promise.all([
-          fetch('http://localhost:4000/api/station-owner/financials?role=STATION_OWNER').catch(() => null),
-          fetch('http://localhost:4000/api/station-owner/expansion-candidates?role=STATION_OWNER').catch(() => null),
-          fetch('http://localhost:4000/api/station-owner/alerts?role=STATION_OWNER').catch(() => null),
-        ]);
+  const kpis = [
+    { title: 'Total Revenue', value: '₹8,24,000', delta: '+16%', deltaType: 'positive', icon: DollarSign, iconColor: 'text-blue-500' },
+    { title: 'Operating Cost', value: '₹3,12,000', delta: '+8%', deltaType: 'negative', icon: AlertTriangle, iconColor: 'text-red-500' },
+    { title: 'Net Profit', value: '₹5,12,000', delta: '+18%', deltaType: 'positive', icon: TrendingUp, iconColor: 'text-emerald-500' },
+    { title: 'Charger Utilization', value: '78%', delta: '+12%', deltaType: 'positive', icon: Zap, iconColor: 'text-amber-500' },
+  ];
 
-        if (finRes && finRes.ok) {
-          const fins = await finRes.json();
-          setStationFinancials(fins);
-          if (fins.length > 0 && !selectedStationId) {
-            setSelectedStationId(fins[0].stationId);
-          }
-        }
-        if (expRes && expRes.ok) {
-          setExpansionCandidates(await expRes.json());
-        }
-        if (alRes && alRes.ok) {
-          setStationAlerts(await alRes.json());
-        }
-      } catch (err) {
-        console.error('Failed to load station owner analytics', err);
-      }
-    };
+  const expansionCandidates = [
+    { id: '1', name: 'Dahanu Highway Hub', demand: 'High Demand', estProfit: '₹3.2L/month', capex: '₹1.8 Cr' },
+    { id: '2', name: 'Palghar City Hub', demand: 'Medium Demand', estProfit: '₹2.1L/month', capex: '₹1.2 Cr' },
+    { id: '3', name: 'Vasai East Hub', demand: 'Growing Demand', estProfit: '₹2.6L/month', capex: '₹1.5 Cr' },
+  ];
 
-    fetchFinancials();
-  }, [setStationFinancials, setExpansionCandidates, setStationAlerts]);
-
-  // Aggregate metrics across stations
-  const totalRevenue = stationFinancials.reduce((acc, s) => acc + s.grossRevenueMonthly, 0);
-  const totalOpex = stationFinancials.reduce((acc, s) => acc + s.totalOpexMonthly, 0);
-  const totalNetProfit = stationFinancials.reduce((acc, s) => acc + s.netOperatingProfitMonthly, 0);
-  const avgMargin = totalRevenue > 0 ? Number(((totalNetProfit / totalRevenue) * 100).toFixed(1)) : 0;
-  const totalBays = stationFinancials.reduce((acc, s) => acc + s.totalBays, 0);
-  const availableBays = stationFinancials.reduce((acc, s) => acc + s.availableBays, 0);
-
-  const activeStationMetric = stationFinancials.find((s) => s.stationId === selectedStationId) || stationFinancials[0];
+  // 7 days x 6 hour intervals heatmap
+  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const hourSlots = ['6', '9', '12', '15', '18', '21'];
+  // Opacity levels (0.1 to 0.9) to simulate realistic demand peaks
+  const heatmapData = [
+    [0.2, 0.4, 0.7, 0.5, 0.9, 0.3], // Mon
+    [0.3, 0.5, 0.8, 0.6, 0.8, 0.4], // Tue
+    [0.2, 0.6, 0.8, 0.7, 0.9, 0.3], // Wed
+    [0.3, 0.5, 0.7, 0.6, 0.9, 0.4], // Thu
+    [0.4, 0.7, 0.9, 0.8, 0.95, 0.6], // Fri
+    [0.5, 0.8, 0.95, 0.9, 0.95, 0.7], // Sat
+    [0.6, 0.9, 0.95, 0.8, 0.85, 0.5], // Sun
+  ];
 
   return (
-    <div className="flex flex-col h-full bg-slate-50/70 overflow-y-auto p-6 font-sans">
-      {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 mb-6 border-b border-slate-200 gap-4">
+    <div className={`w-full ${embedded ? 'h-full min-h-[520px]' : 'h-screen'} bg-[#f1f5f9] text-slate-800 flex overflow-hidden font-sans select-none`}>
+      {/* ========================================================
+          1. LEFT DARK NAVY SIDEBAR
+         ======================================================== */}
+      <aside className="w-16 md:w-56 bg-[#0c1322] border-r border-[#192339] flex flex-col justify-between shrink-0 z-30 transition-all">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 uppercase tracking-wider font-mono">
-              Commercial Hub Operator
-            </span>
-            <span className="text-slate-400 text-xs">·</span>
-            <span className="text-xs font-semibold text-slate-600 font-mono">Station Profitability & Expansion</span>
-          </div>
-          <h2 className="text-xl font-black text-slate-900 tracking-tight mt-1 flex items-center gap-2">
-            {currentUser?.organization || 'Patel Fuels & EV Charging Stations LLP'}
-          </h2>
-          <p className="text-xs text-slate-500">
-            Operating {stationFinancials.length} Charging Hubs in Boisar–Palghar Belt
-          </p>
-        </div>
-
-        {/* View Switcher Tabs & Assumptions Trigger */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => setShowAssumptionsModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-sm"
-          >
-            <HelpCircle className="w-3.5 h-3.5 text-slate-400" />
-            <span>Financial Assumptions</span>
-          </button>
-
-          <div className="flex items-center bg-white p-1 rounded-xl border border-slate-200 shadow-sm text-xs font-bold">
-            <button
-              onClick={() => setActiveTab('ANALYTICS')}
-              className={`px-3 py-1 rounded-lg transition-all ${
-                activeTab === 'ANALYTICS' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Station P&L
-            </button>
-            <button
-              onClick={() => setActiveTab('RANKING')}
-              className={`px-3 py-1 rounded-lg transition-all ${
-                activeTab === 'RANKING' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Profitability Ranking
-            </button>
-            <button
-              onClick={() => setActiveTab('EXPANSION')}
-              className={`px-3 py-1 rounded-lg transition-all ${
-                activeTab === 'EXPANSION' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Expansion Analysis
-            </button>
-            <button
-              onClick={() => setActiveTab('ALERTS')}
-              className={`px-3 py-1 rounded-lg transition-all relative ${
-                activeTab === 'ALERTS' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Alerts ({stationAlerts.length})
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Network Overview Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
-          <span className="text-[10px] font-mono text-slate-400 block">TOTAL MONTHLY REVENUE</span>
-          <span className="text-xl font-black text-slate-900 font-mono">₹{(totalRevenue / 100000).toFixed(2)} Lakh</span>
-          <span className="text-[11px] text-slate-500 font-mono mt-1 block">Retail Tariff: ₹18.5/kWh</span>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
-          <span className="text-[10px] font-mono text-slate-400 block">TOTAL MONTHLY OPEX</span>
-          <span className="text-xl font-black text-slate-800 font-mono">₹{(totalOpex / 100000).toFixed(2)} Lakh</span>
-          <span className="text-[11px] text-slate-500 font-mono mt-1 block">Power + Demand + Leases</span>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
-          <span className="text-[10px] font-mono text-slate-400 block">NET OPERATING PROFIT</span>
-          <span className="text-xl font-black text-emerald-600 font-mono">₹{(totalNetProfit / 100000).toFixed(2)} Lakh</span>
-          <span className="text-[11px] text-emerald-700 font-bold font-mono mt-1 block">
-            Net Margin: {avgMargin}%
-          </span>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
-          <span className="text-[10px] font-mono text-slate-400 block">NETWORK CHARGING BAYS</span>
-          <span className="text-xl font-black text-blue-600 font-mono">{availableBays} / {totalBays} Free</span>
-          <span className="text-[11px] text-slate-500 font-mono mt-1 block">
-            {stationFinancials.length} Stations Active
-          </span>
-        </div>
-      </div>
-
-      {/* TAB 1: EXISTING STATION ANALYTICS (P&L) */}
-      {activeTab === 'ANALYTICS' && (
-        <div className="space-y-6">
-          {/* Station Selector Chips */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1">
-            {stationFinancials.map((st) => (
-              <button
-                key={st.stationId}
-                onClick={() => setSelectedStationId(st.stationId)}
-                className={`px-4 py-2.5 rounded-xl border text-xs font-bold font-mono transition-all whitespace-nowrap ${
-                  st.stationId === activeStationMetric?.stationId
-                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
-                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                {st.stationCode} · {st.stationName}
-              </button>
-            ))}
-          </div>
-
-          {activeStationMetric && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Financial Breakdown Table */}
-              <div className="lg:col-span-2 bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
-                <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100">
-                  <div>
-                    <h3 className="text-base font-black text-slate-900 font-mono">
-                      {activeStationMetric.stationCode} · {activeStationMetric.stationName} Financial Statement
-                    </h3>
-                    <p className="text-xs text-slate-500">{activeStationMetric.district}</p>
-                  </div>
-                  <span className="px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-emerald-100 text-emerald-800">
-                    Rank #{activeStationMetric.profitabilityRank} in Network
-                  </span>
-                </div>
-
-                {/* Clear Financial Statement Breakdown */}
-                <div className="space-y-3 font-mono text-xs">
-                  <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl font-bold">
-                    <span className="text-slate-800">1. Gross Revenue (Monthly Delivered: {activeStationMetric.monthlyEnergyDeliveredKwh.toLocaleString()} kWh @ ₹18.5/kWh)</span>
-                    <span className="text-slate-900 text-sm">₹{activeStationMetric.grossRevenueMonthly.toLocaleString()}</span>
-                  </div>
-
-                  <div className="flex items-center justify-between px-3 text-slate-600">
-                    <span>(-) Wholesale Electricity Cost ({activeStationMetric.monthlyEnergyDeliveredKwh.toLocaleString()} kWh @ ₹7.8/kWh)</span>
-                    <span>-₹{activeStationMetric.wholesaleElectricityCostMonthly.toLocaleString()}</span>
-                  </div>
-
-                  <div className="flex items-center justify-between p-2.5 bg-blue-50/70 rounded-xl font-bold text-blue-900">
-                    <span>= Gross Operating Margin</span>
-                    <span>₹{activeStationMetric.grossMarginMonthly.toLocaleString()} ({activeStationMetric.grossMarginPct}%)</span>
-                  </div>
-
-                  <div className="px-3 space-y-1.5 text-[11px] text-slate-500 pt-1">
-                    <span className="font-bold text-slate-700 block">Operating Expenses (OPEX):</span>
-                    <div className="flex justify-between">
-                      <span>• Grid Contracted Demand Charges</span>
-                      <span>-₹{activeStationMetric.opexBreakdown.demandCharges.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>• Charger Preventive Maintenance ({activeStationMetric.totalBays} Bays)</span>
-                      <span>-₹{activeStationMetric.opexBreakdown.maintenance.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>• Site Lease / Land Rent</span>
-                      <span>-₹{activeStationMetric.opexBreakdown.rentAndLease.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>• Security & Attendant Staffing</span>
-                      <span>-₹{activeStationMetric.opexBreakdown.staffing.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>• Cloud Network & Billing Fee (3.5%)</span>
-                      <span>-₹{activeStationMetric.opexBreakdown.networkFees.toLocaleString()}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 bg-emerald-50 rounded-xl font-black text-emerald-900 text-sm border border-emerald-200">
-                    <span>= Net Operating Profit (EBITDA)</span>
-                    <span>₹{activeStationMetric.netOperatingProfitMonthly.toLocaleString()} ({activeStationMetric.operatingMarginPct}%)</span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-slate-100 text-xs font-mono">
-                  <div className="p-3 bg-slate-50 rounded-xl text-center">
-                    <span className="text-slate-400 block text-[10px]">REVENUE / BAY</span>
-                    <span className="font-bold text-slate-900">₹{activeStationMetric.revenuePerBayMonthly.toLocaleString()}</span>
-                  </div>
-                  <div className="p-3 bg-slate-50 rounded-xl text-center">
-                    <span className="text-slate-400 block text-[10px]">NET PROFIT / BAY</span>
-                    <span className="font-bold text-emerald-600">₹{activeStationMetric.profitPerBayMonthly.toLocaleString()}</span>
-                  </div>
-                  <div className="p-3 bg-slate-50 rounded-xl text-center">
-                    <span className="text-slate-400 block text-[10px]">PAYBACK PERIOD</span>
-                    <span className="font-bold text-blue-600">{activeStationMetric.estimatedPaybackPeriodMonths} Months</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Operational Telemetry Card */}
-              <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
-                <h4 className="text-xs font-black text-slate-900 font-mono uppercase tracking-wider">
-                  Operational Health & Occupancy
-                </h4>
-
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
-                  <span className="text-[10px] text-slate-400 font-mono block">CHARGER UPTIME</span>
-                  <div className="flex items-center justify-between font-mono font-bold">
-                    <span className="text-slate-900 text-lg">{activeStationMetric.uptimePct}%</span>
-                    <span className="text-emerald-600 text-xs">High Reliability</span>
-                  </div>
-                </div>
-
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
-                  <span className="text-[10px] text-slate-400 font-mono block">OCCUPANCY & QUEUE</span>
-                  <div className="flex items-center justify-between font-mono font-bold">
-                    <span className="text-slate-900 text-lg">{activeStationMetric.occupancyPct}%</span>
-                    <span className="text-amber-600 text-xs">{activeStationMetric.queueLength} in Queue</span>
-                  </div>
-                </div>
-
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
-                  <span className="text-[10px] text-slate-400 font-mono block">PEAK DEMAND WINDOW</span>
-                  <span className="font-mono font-bold text-slate-900 text-xs block">
-                    {activeStationMetric.peakHour}
-                  </span>
-                </div>
-
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
-                  <span className="text-[10px] text-slate-400 font-mono block">AVG CHARGING TIME</span>
-                  <span className="font-mono font-bold text-slate-900 text-xs block">
-                    {activeStationMetric.avgChargingDurationMin} Minutes / Session
-                  </span>
-                </div>
-              </div>
+          {/* Logo Brand */}
+          <div className="h-16 flex items-center px-4 gap-2.5 border-b border-[#192339]">
+            <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center text-white font-black text-sm shadow-lg shadow-blue-600/30 shrink-0">
+              ⚡
             </div>
-          )}
-        </div>
-      )}
+            <div className="hidden md:block">
+              <span className="font-mono text-sm font-black tracking-wider text-white">
+                EVNEXUS
+              </span>
+              <span className="block text-[10px] text-emerald-400 font-mono -mt-0.5">Station Operator</span>
+            </div>
+          </div>
 
-      {/* TAB 2: MOST PROFITABLE STATION ANALYSIS & RANKING */}
-      {activeTab === 'RANKING' && (
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
+          {/* Navigation Links */}
+          <nav className="p-3 space-y-1">
+            {[
+              { id: 'Overview', label: 'Overview', icon: Home },
+              { id: 'Live', label: 'Live Operations', icon: Activity },
+              { id: 'Revenue', label: 'Revenue & Profit', icon: DollarSign },
+              { id: 'Chargers', label: 'Charger Management', icon: Zap },
+              { id: 'Demand', label: 'Demand Analysis', icon: BarChart3 },
+              { id: 'Expansion', label: 'Expansion Planning', icon: Layers },
+              { id: 'Reports', label: 'Reports', icon: FileText },
+              { id: 'Settings', label: 'Settings', icon: Settings },
+            ].map((item) => {
+              const Icon = item.icon;
+              const isActive = activeMenu === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveMenu(item.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                    isActive
+                      ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                      : 'text-slate-400 hover:text-white hover:bg-[#162137]'
+                  }`}
+                  title={item.label}
+                >
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span className="hidden md:inline truncate">{item.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* Tariff & P&L Status */}
+        <div className="p-3 border-t border-[#192339] hidden md:block">
+          <div className="p-2.5 rounded-xl bg-[#131b2e] border border-emerald-500/20 text-[11px]">
+            <div className="flex items-center gap-1.5 text-emerald-400 font-bold mb-1">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Solar Grid Tied</span>
+            </div>
+            <p className="text-[10px] text-slate-400 leading-tight">
+              Wholesale tariff: ₹7.20/kWh. Retail vend: ₹18.50/kWh.
+            </p>
+          </div>
+        </div>
+      </aside>
+
+      {/* ========================================================
+          2. MAIN CONTENT AREA
+         ======================================================== */}
+      <div className="flex-1 flex flex-col overflow-y-auto bg-[#f8fafc]">
+        {/* Top Header Bar */}
+        <header className="h-16 px-6 bg-white border-b border-slate-200 flex items-center justify-between shrink-0 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center font-black text-emerald-600 text-sm">
+              ⚡
+            </div>
             <div>
-              <h3 className="text-sm font-black text-slate-900">Station Profitability Comparison & Multi-Factor Ranking</h3>
-              <p className="text-xs text-slate-500">
-                Ranked holistically by Net Operating Profit, Capital Investment, Utilization, and Payback Velocity (not revenue alone).
+              <div className="flex items-center gap-2">
+                <h1 className="text-base font-black text-slate-900 tracking-tight">
+                  Boisar Central Hub (A102)
+                </h1>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-600 border border-emerald-500/30 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  Online
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 font-medium">
+                Railway Station / Market Corridor
               </p>
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs font-mono">
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-500">
-                <tr>
-                  <th className="p-3">RANK</th>
-                  <th className="p-3">STATION CODE & NAME</th>
-                  <th className="p-3">BAYS</th>
-                  <th className="p-3">OCCUPANCY</th>
-                  <th className="p-3">MONTHLY REVENUE</th>
-                  <th className="p-3">MONTHLY OPEX</th>
-                  <th className="p-3">NET PROFIT</th>
-                  <th className="p-3">NET MARGIN</th>
-                  <th className="p-3">PAYBACK</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {stationFinancials.map((st) => (
-                  <tr key={st.stationId} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="p-3 font-black text-blue-600">#{st.profitabilityRank}</td>
-                    <td className="p-3 font-bold text-slate-900">
-                      {st.stationCode} · {st.stationName}
-                      <span className="block text-[10px] text-slate-400 font-normal">{st.district}</span>
-                    </td>
-                    <td className="p-3">{st.totalBays} Bays</td>
-                    <td className="p-3">
-                      <span className="px-2 py-0.5 rounded-full bg-slate-100 font-bold">
-                        {st.occupancyPct}%
+          <div className="flex items-center gap-2.5">
+            {/* Filter: Date */}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200/80 border border-slate-200 text-xs font-bold text-slate-700 cursor-pointer">
+              <Calendar className="w-3.5 h-3.5 text-slate-500" />
+              <span>{timeRange}</span>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            </div>
+
+            {/* Avatar */}
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-600 border border-white flex items-center justify-center text-white font-bold text-xs shadow-xs ml-1">
+              SO
+            </div>
+          </div>
+        </header>
+
+        {/* Dashboard Body Grid */}
+        <main className="p-6 space-y-6">
+          {/* 4 Top KPI Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {kpis.map((kpi, idx) => {
+              const Icon = kpi.icon;
+              return (
+                <div key={idx} className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-slate-500">{kpi.title}</span>
+                    <div className={`p-1.5 rounded-lg bg-slate-50 ${kpi.iconColor}`}>
+                      <Icon className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <div className="text-2xl font-black text-slate-900 tracking-tight font-sans">
+                    {kpi.value}
+                  </div>
+                  <div className="flex items-center gap-1 mt-1">
+                    <span className={`text-xs font-bold ${
+                      kpi.deltaType === 'positive' ? 'text-emerald-600' : 'text-red-600'
+                    }`}>
+                      {kpi.delta}
+                    </span>
+                    <span className="text-[11px] text-slate-400">vs last month</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Middle Row: Station Hero Image + Charging Sessions Trend */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Station Hero Card */}
+            <div className="relative rounded-3xl overflow-hidden border border-slate-200/80 shadow-xs h-64 group bg-slate-900">
+              <img
+                src="/assets/charging-hub-hero.jpg"
+                alt="Boisar Central EV Hub"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-90"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+              
+              {/* Bottom Badges Overlay */}
+              <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-white/20 text-white text-xs font-bold">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>4/4 Bays Available</span>
+                </div>
+
+                <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-white/20 text-white text-xs font-bold">
+                  <Clock className="w-3.5 h-3.5 text-blue-400" />
+                  <span>12 min Avg. Wait Time</span>
+                </div>
+
+                <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-white/20 text-white text-xs font-bold">
+                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                  <span>36 Sessions Today</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Charging Sessions Curve Chart */}
+            <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">Charging Sessions</h3>
+                  <p className="text-xs text-slate-400 font-mono">Daily Traffic Throughput</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-lg font-black text-slate-900 font-mono">1,248</span>
+                  <span className="ml-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    +22%
+                  </span>
+                </div>
+              </div>
+
+              {/* Smooth Sessions Curve */}
+              <div className="w-full h-44 relative flex items-end">
+                <svg className="w-full h-40 overflow-visible" viewBox="0 0 500 140">
+                  <defs>
+                    <linearGradient id="sessionsGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.3" />
+                      <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.0" />
+                    </linearGradient>
+                  </defs>
+
+                  <line x1="0" y1="20" x2="500" y2="20" stroke="#f1f5f9" strokeWidth="1" />
+                  <line x1="0" y1="60" x2="500" y2="60" stroke="#f1f5f9" strokeWidth="1" />
+                  <line x1="0" y1="100" x2="500" y2="100" stroke="#f1f5f9" strokeWidth="1" />
+
+                  {/* Area */}
+                  <path
+                    d="M 20 120 Q 140 130, 200 90 T 360 40 T 480 30 L 480 135 L 20 135 Z"
+                    fill="url(#sessionsGrad)"
+                  />
+                  {/* Curve Line */}
+                  <path
+                    d="M 20 120 Q 140 130, 200 90 T 360 40 T 480 30"
+                    fill="none"
+                    stroke="#2563eb"
+                    strokeWidth="3.5"
+                    strokeLinecap="round"
+                  />
+
+                  {/* Points */}
+                  {[
+                    { cx: 20, cy: 120 },
+                    { cx: 160, cy: 110 },
+                    { cx: 250, cy: 75 },
+                    { cx: 360, cy: 40 },
+                    { cx: 480, cy: 30 },
+                  ].map((p, i) => (
+                    <circle key={i} cx={p.cx} cy={p.cy} r="4" fill="#ffffff" stroke="#2563eb" strokeWidth="2.5" />
+                  ))}
+                </svg>
+              </div>
+
+              <div className="flex justify-between text-[11px] font-mono font-semibold text-slate-400 mt-2 px-2">
+                <span>12 AM</span>
+                <span>6 AM</span>
+                <span>12 PM</span>
+                <span>6 PM</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom Row: 3 Columns (Revenue Trend, Peak Demand Hours, Expansion Opportunity) */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* 1. Revenue & Profit Trend Grouped Bars */}
+            <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between">
+              <div>
+                <h3 className="text-sm font-black text-slate-900">Revenue & Profit Trend</h3>
+                <div className="flex items-center gap-3 text-[10px] font-mono mt-2">
+                  <span className="flex items-center gap-1 font-bold text-blue-600">
+                    <span className="w-2 h-2 rounded-xs bg-blue-500" /> Revenue
+                  </span>
+                  <span className="flex items-center gap-1 font-bold text-red-500">
+                    <span className="w-2 h-2 rounded-xs bg-red-400" /> Cost
+                  </span>
+                  <span className="flex items-center gap-1 font-bold text-emerald-600">
+                    <span className="w-2 h-2 rounded-xs bg-emerald-500" /> Profit
+                  </span>
+                </div>
+              </div>
+
+              {/* Grouped Bars SVG */}
+              <div className="w-full h-40 relative flex items-end my-3">
+                <svg className="w-full h-36" viewBox="0 0 300 120">
+                  {/* Apr to Sep */}
+                  {[
+                    { x: 10, rev: 60, cost: 35, prof: 25 },
+                    { x: 55, rev: 72, cost: 40, prof: 32 },
+                    { x: 100, rev: 80, cost: 42, prof: 38 },
+                    { x: 145, rev: 88, cost: 45, prof: 43 },
+                    { x: 190, rev: 98, cost: 48, prof: 50 },
+                    { x: 235, rev: 110, cost: 52, prof: 58 },
+                  ].map((bar, i) => (
+                    <g key={i}>
+                      <rect x={bar.x} y={115 - bar.rev} width="8" height={bar.rev} rx="2" fill="#3b82f6" />
+                      <rect x={bar.x + 10} y={115 - bar.cost} width="8" height={bar.cost} rx="2" fill="#f87171" />
+                      <rect x={bar.x + 20} y={115 - bar.prof} width="8" height={bar.prof} rx="2" fill="#10b981" />
+                    </g>
+                  ))}
+                </svg>
+              </div>
+
+              <div className="flex justify-between text-[10px] font-mono font-semibold text-slate-400 px-1">
+                <span>Apr</span>
+                <span>May</span>
+                <span>Jun</span>
+                <span>Jul</span>
+                <span>Aug</span>
+                <span>Sep</span>
+              </div>
+            </div>
+
+            {/* 2. Peak Demand Hours Heatmap */}
+            <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between">
+              <div>
+                <h3 className="text-sm font-black text-slate-900">Peak Demand Hours</h3>
+                <p className="text-xs text-slate-400 font-mono">Diurnal Grid Stress Matrix</p>
+              </div>
+
+              {/* Heatmap Matrix */}
+              <div className="my-2">
+                {/* Header slots */}
+                <div className="grid grid-cols-7 gap-1 text-[10px] font-mono text-slate-400 text-center mb-1">
+                  <span className="text-left"></span>
+                  {hourSlots.map((h) => (
+                    <span key={h}>{h}</span>
+                  ))}
+                </div>
+
+                {/* Day Rows */}
+                <div className="space-y-1">
+                  {days.map((day, dIdx) => (
+                    <div key={day} className="grid grid-cols-7 gap-1 items-center">
+                      <span className="text-[10px] font-mono font-bold text-slate-500">{day}</span>
+                      {heatmapData[dIdx].map((val, hIdx) => (
+                        <div
+                          key={hIdx}
+                          style={{
+                            backgroundColor: `rgba(59, 130, 246, ${val})`,
+                          }}
+                          className="h-4 rounded-xs border border-blue-200/40 hover:scale-110 transition-transform cursor-pointer"
+                          title={`${day} @ ${hourSlots[hIdx]}:00 — Demand ${(val * 100).toFixed(0)}%`}
+                        />
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 pt-1">
+                <span>Low Demand</span>
+                <div className="flex gap-1">
+                  {[0.2, 0.4, 0.7, 0.95].map((op, i) => (
+                    <span key={i} style={{ backgroundColor: `rgba(59, 130, 246, ${op})` }} className="w-3 h-2 rounded-xs" />
+                  ))}
+                </div>
+                <span>Peak Load</span>
+              </div>
+            </div>
+
+            {/* 3. Expansion Opportunity */}
+            <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between">
+              <div>
+                <h3 className="text-sm font-black text-slate-900">Expansion Opportunity</h3>
+                <p className="text-xs text-slate-400 font-mono">Recommended Substation Corridors</p>
+              </div>
+
+              <div className="space-y-3 my-2">
+                {expansionCandidates.map((c) => (
+                  <div
+                    key={c.id}
+                    className="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 hover:border-emerald-400 transition-all flex items-center justify-between"
+                  >
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 font-mono font-bold text-[10px] flex items-center justify-center">
+                          {c.id}
+                        </span>
+                        <h4 className="text-xs font-bold text-slate-900">{c.name}</h4>
+                      </div>
+                      <span className="text-[10px] font-mono font-bold text-amber-600 block mt-0.5">
+                        {c.demand}
                       </span>
-                    </td>
-                    <td className="p-3 font-bold">₹{st.grossRevenueMonthly.toLocaleString()}</td>
-                    <td className="p-3 text-slate-600">₹{st.totalOpexMonthly.toLocaleString()}</td>
-                    <td className="p-3 font-black text-emerald-600">₹{st.netOperatingProfitMonthly.toLocaleString()}</td>
-                    <td className="p-3 font-bold text-emerald-700">{st.operatingMarginPct}%</td>
-                    <td className="p-3 text-blue-700 font-bold">{st.estimatedPaybackPeriodMonths} Mo</td>
-                  </tr>
+                      <span className="text-[10px] font-mono text-slate-500 block">
+                        Est. Profit: {c.estProfit}
+                      </span>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="text-xs font-black text-slate-900 font-mono block mb-1">
+                        {c.capex}
+                      </span>
+                      <button
+                        onClick={() => setInvestedCandidate(c.id)}
+                        className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                          investedCandidate === c.id
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs'
+                        }`}
+                      >
+                        {investedCandidate === c.id ? 'Approved' : 'Invest'}
+                      </button>
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 3: NEW LOCATION RECOMMENDATIONS & EXPANSION ANALYSIS */}
-      {activeTab === 'EXPANSION' && (
-        <div className="space-y-6">
-          <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 text-xs text-emerald-900 leading-relaxed">
-            💡 <strong>Expansion Intelligence:</strong> Candidate zones analyzed using regional EV traffic telemetry, grid substation headroom, competitor distance, and capital payback forecasts. All forecasts are labeled as estimates.
-          </div>
-
-          {/* Expansion Candidates Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {expansionCandidates.map((cand) => (
-              <div
-                key={cand.id}
-                className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm hover:border-emerald-500 transition-all text-xs"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="px-2.5 py-0.5 rounded-full font-mono text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                    Rank #{cand.recommendationRank} Expansion Target
-                  </span>
-                  <span className="text-[10px] font-mono text-slate-400 font-bold">
-                    Zone: {cand.zoneType}
-                  </span>
-                </div>
-
-                <h4 className="text-sm font-black text-slate-900 mb-1">{cand.name}</h4>
-                <p className="text-[11px] text-slate-500 mb-3">{cand.locationArea}</p>
-
-                {/* Key Metrics Grid */}
-                <div className="grid grid-cols-3 gap-2 font-mono text-center p-3 bg-slate-50 rounded-xl mb-3">
-                  <div>
-                    <span className="text-[9px] text-slate-400 block">EST. CAPEX</span>
-                    <span className="font-bold text-slate-900">₹{(cand.initialCapex / 100000).toFixed(1)}L</span>
-                  </div>
-                  <div>
-                    <span className="text-[9px] text-slate-400 block">NET PROFIT/MO</span>
-                    <span className="font-bold text-emerald-600">₹{(cand.projectedMonthlyNetProfit / 100000).toFixed(2)}L</span>
-                  </div>
-                  <div>
-                    <span className="text-[9px] text-slate-400 block">PAYBACK</span>
-                    <span className="font-bold text-blue-600">{cand.estimatedPaybackMonths} Mo</span>
-                  </div>
-                </div>
-
-                <div className="p-3 rounded-xl bg-slate-50/80 border border-slate-100 text-[11px] text-slate-600 leading-relaxed mb-3">
-                  <span className="font-bold text-slate-700 block mb-0.5">Why Recommended:</span>
-                  {cand.recommendationReason}
-                </div>
-
-                <div className="flex items-center justify-between text-[10px] font-mono text-slate-500 pt-2 border-t border-slate-100">
-                  <span>Grid Readiness: <strong>{cand.gridReadinessScore}/100</strong></span>
-                  <span>Competition: <strong>{cand.competitionDensity}</strong></span>
-                  <span>Target: <strong>{cand.targetBaysCount} Fast Bays</strong></span>
-                </div>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
 
-      {/* TAB 4: STATION OWNER ALERTS */}
-      {activeTab === 'ALERTS' && (
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-3">
-          <h3 className="text-sm font-black text-slate-900 mb-2">Automated Commercial & Operational Alerts</h3>
-          {stationAlerts.map((al) => (
-            <div
-              key={al.id}
-              className={`p-4 rounded-xl border text-xs flex items-start gap-3 ${
-                al.severity === 'CRITICAL'
-                  ? 'bg-red-50/70 border-red-200 text-red-900'
-                  : al.severity === 'WARNING'
-                  ? 'bg-amber-50/70 border-amber-200 text-amber-900'
-                  : 'bg-blue-50/70 border-blue-200 text-blue-900'
-              }`}
-            >
-              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold">{al.title}</span>
-                  <span className="text-[10px] font-mono text-slate-400">
-                    {new Date(al.timestamp).toLocaleTimeString()}
-                  </span>
-                </div>
-                <p className="text-[11px] mt-1 leading-relaxed">{al.message}</p>
+              <div className="pt-2 text-center text-[10px] font-mono text-slate-400">
+                AI Payback: 2.3 Years · Projected IRR 28.4%
               </div>
             </div>
-          ))}
-        </div>
-      )}
-
-      {/* Financial Assumptions Modal */}
-      {showAssumptionsModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 text-xs">
-            <h3 className="text-base font-black text-slate-900 mb-2">Documented Financial Assumptions</h3>
-            <p className="text-slate-500 mb-4 leading-relaxed">
-              Every financial calculation in EVNEXUS distinguishes Gross Revenue, Cost of Goods Sold, Gross Margin, and Net Operating Profit using the following baseline parameters:
-            </p>
-
-            <div className="space-y-2 font-mono bg-slate-50 p-4 rounded-xl border border-slate-100 text-[11px]">
-              <div className="flex justify-between">
-                <span>• DC Fast Retail Charging Tariff:</span>
-                <span className="font-bold">₹18.50 / kWh</span>
-              </div>
-              <div className="flex justify-between">
-                <span>• AC Slow Charging Tariff:</span>
-                <span className="font-bold">₹12.00 / kWh</span>
-              </div>
-              <div className="flex justify-between">
-                <span>• Grid Wholesale Tariff (MSEDCL 11kV):</span>
-                <span className="font-bold">₹7.80 / kWh</span>
-              </div>
-              <div className="flex justify-between">
-                <span>• Grid Contracted Demand Charge:</span>
-                <span className="font-bold">₹240 / kW / month</span>
-              </div>
-              <div className="flex justify-between">
-                <span>• Charger Preventive Maintenance:</span>
-                <span className="font-bold">₹3,500 / bay / month</span>
-              </div>
-              <div className="flex justify-between">
-                <span>• Station Land Lease / Rent:</span>
-                <span className="font-bold">₹25,000 / station / month</span>
-              </div>
-              <div className="flex justify-between">
-                <span>• Staff & Security Overhead:</span>
-                <span className="font-bold">₹20,000 / station / month</span>
-              </div>
-              <div className="flex justify-between">
-                <span>• Cloud Network & Billing Fee:</span>
-                <span className="font-bold">3.5% of Gross Revenue</span>
-              </div>
-            </div>
-
-            <div className="flex justify-end mt-4">
-              <button
-                onClick={() => setShowAssumptionsModal(false)}
-                className="px-4 py-2 bg-slate-900 text-white rounded-xl font-bold"
-              >
-                Close
-              </button>
-            </div>
           </div>
-        </div>
-      )}
+        </main>
+      </div>
     </div>
   );
 }

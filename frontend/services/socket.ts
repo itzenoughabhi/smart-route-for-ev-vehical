@@ -210,6 +210,14 @@ class SocketService {
     this.emit('rescue:create', payload);
   }
 
+  public requestRescue(payload: any) {
+    this.createRescueRequest(payload);
+  }
+
+  public cancelRescue(requestId: string) {
+    this.emit('rescue:cancel', { requestId });
+  }
+
   public dispatchRescue() {
     this.emit('rescue:dispatch');
   }
