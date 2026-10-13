@@ -335,6 +335,200 @@ apiRouter.get('/station-owner/alerts', requireRole('STATION_OWNER', 'PLATFORM_AD
   res.json(stationAnalyticsService.getStationOwnerAlerts());
 });
 
+apiRouter.get('/station-owner/towing-fleet', requireRole('STATION_OWNER', 'PLATFORM_ADMIN'), (req, res) => {
+  const stationCode = (req.query.stationCode as string) || 'A102';
+  const fleetData: Record<string, any> = {
+    A102: {
+      stationCode: 'A102',
+      stationName: 'Boisar Central Hub',
+      corridor: 'Railway Station / Market Corridor',
+      towVans: [
+        {
+          code: 'Tow-01',
+          model: 'Heavy Patrol EV Hauler',
+          driverName: 'Ramesh Kumar',
+          phone: '+91 98230 44101',
+          status: 'AVAILABLE',
+          totalTowedCount: 28,
+          monthlyTows: 14,
+          todayTows: 2,
+          totalRevenueEarned: 33600,
+        },
+        {
+          code: 'Tow-02',
+          model: 'Rapid Rescue Tow Van',
+          driverName: 'Suresh Patil',
+          phone: '+91 98230 44102',
+          status: 'ON_JOB',
+          totalTowedCount: 14,
+          monthlyTows: 8,
+          todayTows: 1,
+          totalRevenueEarned: 16800,
+          currentMission: { targetEv: 'EV-102', etaMinutes: 8, destination: 'Boisar Central Hub Bay #2' }
+        },
+      ],
+      towedHistory: [
+        {
+          id: 'RESC-1021',
+          timestamp: 'Today, 00:24 AM',
+          evCode: 'EV-102',
+          evModel: 'Tata Nexon EV',
+          towVanCode: 'Tow-02',
+          driverName: 'Suresh Patil',
+          reason: '0% Battery Depletion near Boisar Flyover',
+          pickupLocation: 'Boisar Highway Flyover km 4.2',
+          distanceKm: 3.4,
+          towingFee: 1200,
+          status: 'CHARGING_AT_STATION',
+        },
+        {
+          id: 'RESC-1018',
+          timestamp: 'Yesterday, 08:15 PM',
+          evCode: 'EV-024',
+          evModel: 'Tata Nexon EV',
+          towVanCode: 'Tow-01',
+          driverName: 'Ramesh Kumar',
+          reason: 'Low Battery Exhaustion & Stalling',
+          pickupLocation: 'MIDC Phase-1 Main Road',
+          distanceKm: 2.1,
+          towingFee: 1200,
+          status: 'COMPLETED',
+        },
+        {
+          id: 'RESC-1012',
+          timestamp: '13 Oct, 02:40 PM',
+          evCode: 'EV-087',
+          evModel: 'MG ZS EV',
+          towVanCode: 'Tow-01',
+          driverName: 'Ramesh Kumar',
+          reason: 'Inverter Thermal Cutoff on Incline',
+          pickupLocation: 'Umroli Junction SH-40',
+          distanceKm: 5.2,
+          towingFee: 1500,
+          status: 'COMPLETED',
+        },
+        {
+          id: 'RESC-1004',
+          timestamp: '12 Oct, 11:10 AM',
+          evCode: 'EV-057',
+          evModel: 'Tata Tiago EV',
+          towVanCode: 'Tow-02',
+          driverName: 'Suresh Patil',
+          reason: 'Battery 2% Safety Shutdown',
+          pickupLocation: 'Palghar Road Market Link',
+          distanceKm: 4.0,
+          towingFee: 1200,
+          status: 'COMPLETED',
+        },
+      ],
+    },
+    B104: {
+      stationCode: 'B104',
+      stationName: 'Palghar Highway Hub',
+      corridor: 'SH-40 Expressway Transit Corridor',
+      towVans: [
+        {
+          code: 'Tow-03',
+          model: 'Expressway Rescue Hauler',
+          driverName: 'Amit Shinde',
+          phone: '+91 98230 44103',
+          status: 'AVAILABLE',
+          totalTowedCount: 32,
+          monthlyTows: 18,
+          todayTows: 3,
+          totalRevenueEarned: 41600,
+        },
+        {
+          code: 'Tow-04',
+          model: 'All-Terrain Flatbed EV',
+          driverName: 'Ganesh Jadhav',
+          phone: '+91 98230 44104',
+          status: 'AVAILABLE',
+          totalTowedCount: 19,
+          monthlyTows: 11,
+          todayTows: 1,
+          totalRevenueEarned: 24700,
+        },
+      ],
+      towedHistory: [
+        {
+          id: 'RESC-2041',
+          timestamp: '13 Oct, 10:30 PM',
+          evCode: 'EV-098',
+          evModel: 'Hyundai Ioniq 5',
+          towVanCode: 'Tow-03',
+          driverName: 'Amit Shinde',
+          reason: 'Front Suspension Breakdown',
+          pickupLocation: 'SH-40 Expressway km 12',
+          distanceKm: 6.8,
+          towingFee: 1800,
+          status: 'COMPLETED',
+        },
+        {
+          id: 'RESC-2035',
+          timestamp: '13 Oct, 04:15 PM',
+          evCode: 'EV-044',
+          evModel: 'Mahindra XUV400',
+          towVanCode: 'Tow-04',
+          driverName: 'Ganesh Jadhav',
+          reason: 'Highway Range Exhaustion',
+          pickupLocation: 'Manor Bypass Junction',
+          distanceKm: 5.5,
+          towingFee: 1500,
+          status: 'COMPLETED',
+        },
+      ],
+    },
+    D305: {
+      stationCode: 'D305',
+      stationName: 'Tarapur Industrial Gateway',
+      corridor: 'MIDC Heavy Transport Corridor',
+      towVans: [
+        {
+          code: 'Tow-05',
+          model: 'Heavy Electric Hauler',
+          driverName: 'Mahendra Singh',
+          phone: '+91 98230 44105',
+          status: 'AVAILABLE',
+          totalTowedCount: 24,
+          monthlyTows: 12,
+          todayTows: 1,
+          totalRevenueEarned: 36000,
+        },
+      ],
+      towedHistory: [
+        {
+          id: 'RESC-3019',
+          timestamp: '12 Oct, 09:20 PM',
+          evCode: 'EV-031',
+          evModel: 'Commercial EV Van',
+          towVanCode: 'Tow-05',
+          driverName: 'Mahendra Singh',
+          reason: 'Motor Overheating under Industrial Load',
+          pickupLocation: 'Tarapur MIDC Zone-3 Gate',
+          distanceKm: 3.8,
+          towingFee: 1500,
+          status: 'COMPLETED',
+        },
+      ],
+    },
+  };
+
+  if (stationCode === 'ALL') {
+    const allVans = Object.values(fleetData).flatMap(s => s.towVans);
+    const allHistory = Object.values(fleetData).flatMap(s => s.towedHistory);
+    return res.json({
+      stationCode: 'ALL',
+      stationName: 'All Stations Portfolio',
+      corridor: 'Patel Fuels & EV Charging Stations LLP',
+      towVans: allVans,
+      towedHistory: allHistory,
+    });
+  }
+
+  res.json(fleetData[stationCode] || fleetData['A102']);
+});
+
 // ==========================================
 // 5. RESCUE OPERATOR & DISPATCH ENDPOINTS
 // ==========================================
