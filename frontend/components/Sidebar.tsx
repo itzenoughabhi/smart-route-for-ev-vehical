@@ -96,7 +96,58 @@ export function Sidebar() {
           })}
         </nav>
 
-        <div className="mt-5 pt-4 border-t border-slate-100">
+        <div className="mt-4 pt-3 border-t border-slate-100">
+          <span className="px-2 text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block mb-2">
+            Stakeholder Portals
+          </span>
+          <div className="space-y-1">
+            <button
+              onClick={() => useDigitalTwinStore.getState().openStakeholderDashboard('EV_OWNER')}
+              className="w-full flex items-center justify-between px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition-all text-left"
+            >
+              <span className="flex items-center gap-2">
+                <span>🚗</span>
+                <span>EV Owner</span>
+              </span>
+              <span className="text-[10px] font-mono text-blue-600 font-bold">Portal</span>
+            </button>
+
+            <button
+              onClick={() => useDigitalTwinStore.getState().openStakeholderDashboard('EV_MANUFACTURER')}
+              className="w-full flex items-center justify-between px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition-all text-left"
+            >
+              <span className="flex items-center gap-2">
+                <span>🏭</span>
+                <span>Manufacturer</span>
+              </span>
+              <span className="text-[10px] font-mono text-indigo-600 font-bold">OEM</span>
+            </button>
+
+            <button
+              onClick={() => useDigitalTwinStore.getState().openStakeholderDashboard('STATION_OWNER')}
+              className="w-full flex items-center justify-between px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 transition-all text-left"
+            >
+              <span className="flex items-center gap-2">
+                <span>⛽</span>
+                <span>Station Owner</span>
+              </span>
+              <span className="text-[10px] font-mono text-emerald-600 font-bold">P&L</span>
+            </button>
+
+            <button
+              onClick={() => useDigitalTwinStore.getState().openStakeholderDashboard('RESCUE_OPERATOR')}
+              className="w-full flex items-center justify-between px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-700 hover:bg-amber-50 hover:text-amber-700 transition-all text-left"
+            >
+              <span className="flex items-center gap-2">
+                <span>🛻</span>
+                <span>Rescue Operator</span>
+              </span>
+              <span className="text-[10px] font-mono text-amber-600 font-bold">Dispatch</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-3 pt-3 border-t border-slate-100">
           <button
             onClick={() => toggleScenarioDrawer()}
             className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${

@@ -11,7 +11,14 @@ import {
   ServiceCenter, 
   HomeCharger,
   CameraMode,
-  MapMode 
+  MapMode,
+  User,
+  UserRole,
+  RescueRequest,
+  StationFinancialMetric,
+  ExpansionCandidate,
+  StationOwnerAlert,
+  ManufacturerFleetAnalytics
 } from '../types';
 
 export interface SelectedObject {
@@ -53,6 +60,27 @@ interface DigitalTwinState {
   isScenarioDrawerOpen: boolean;
   isAuditModalOpen: boolean;
   toggleAuditModal: (open?: boolean) => void;
+
+  currentUser: User | null;
+  activeStakeholderRole: UserRole;
+  isStakeholderModalOpen: boolean;
+  activeStakeholderDashboard: UserRole | null;
+  rescueRequests: RescueRequest[];
+  stationFinancials: StationFinancialMetric[];
+  expansionCandidates: ExpansionCandidate[];
+  stationAlerts: StationOwnerAlert[];
+  manufacturerAnalytics: ManufacturerFleetAnalytics | null;
+
+  setUser: (user: User | null) => void;
+  setActiveStakeholderRole: (role: UserRole) => void;
+  openStakeholderDashboard: (role: UserRole) => void;
+  closeStakeholderDashboard: () => void;
+  setRescueRequests: (requests: RescueRequest[]) => void;
+  updateRescueRequest: (req: RescueRequest) => void;
+  setStationFinancials: (metrics: StationFinancialMetric[]) => void;
+  setExpansionCandidates: (candidates: ExpansionCandidate[]) => void;
+  setStationAlerts: (alerts: StationOwnerAlert[]) => void;
+  setManufacturerAnalytics: (analytics: ManufacturerFleetAnalytics) => void;
 
   isManualDrive: boolean;
   manualDriveVehicleId: string | null;
@@ -245,6 +273,38 @@ export const useDigitalTwinStore = create<DigitalTwinState>((set, get) => ({
   isAuditModalOpen: false,
   toggleAuditModal: (open) => set((s) => ({ isAuditModalOpen: open ?? !s.isAuditModalOpen })),
 
+  currentUser: {
+    id: 'usr-owner-01',
+    email: 'owner@evnexus.io',
+    name: 'Rahul Sharma',
+    role: 'EV_OWNER',
+    organization: 'Private Vehicle Owner',
+    assignedVehicleIds: ['veh-ev-024', 'veh-ev-057'],
+  },
+  activeStakeholderRole: 'EV_OWNER',
+  isStakeholderModalOpen: false,
+  activeStakeholderDashboard: null,
+  rescueRequests: [],
+  stationFinancials: [],
+  expansionCandidates: [],
+  stationAlerts: [],
+  manufacturerAnalytics: null,
+
+  setUser: (user) => set({ currentUser: user }),
+  setActiveStakeholderRole: (role) => set({ activeStakeholderRole: role }),
+  openStakeholderDashboard: (role) => set({ activeStakeholderDashboard: role, isStakeholderModalOpen: true }),
+  closeStakeholderDashboard: () => set({ isStakeholderModalOpen: false, activeStakeholderDashboard: null }),
+  setRescueRequests: (requests) => set({ rescueRequests: requests }),
+  updateRescueRequest: (req) => set((s) => ({
+    rescueRequests: s.rescueRequests.some(r => r.id === req.id)
+      ? s.rescueRequests.map(r => r.id === req.id ? req : r)
+      : [req, ...s.rescueRequests]
+  })),
+  setStationFinancials: (stationFinancials) => set({ stationFinancials }),
+  setExpansionCandidates: (expansionCandidates) => set({ expansionCandidates }),
+  setStationAlerts: (stationAlerts) => set({ stationAlerts }),
+  setManufacturerAnalytics: (manufacturerAnalytics) => set({ manufacturerAnalytics }),
+
   isManualDrive: false,
   manualDriveVehicleId: null,
   manualDriveSpeed: 0,
@@ -269,6 +329,7 @@ export const useDigitalTwinStore = create<DigitalTwinState>((set, get) => ({
       energy: snapshot.energy || DEFAULT_ENERGY,
       events: snapshot.events || [],
       recommendations: snapshot.recommendations || [],
+      rescueRequests: snapshot.rescueRequests || [],
       simulationSpeed: snapshot.simulation?.speed ?? 1.0,
       isConnected: true,
     });

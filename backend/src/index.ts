@@ -12,6 +12,11 @@ import { simulationEngine } from './modules/simulation/simulation.engine';
 import { trafficController } from './modules/simulation/traffic.controller';
 import { WorldValidator } from './modules/simulation/world.validator';
 import { WebSocketGateway } from './websocket/gateway';
+import { authService } from './modules/auth/auth.service';
+import { authenticate, requireRole, AuthenticatedRequest } from './modules/auth/auth.middleware';
+import { rescueService } from './modules/rescue/rescue.service';
+import { stationAnalyticsService } from './modules/stations/station.analytics.service';
+import { manufacturerAnalyticsService } from './modules/manufacturer/manufacturer.analytics.service';
 
 dotenv.config();
 
@@ -202,6 +207,161 @@ apiRouter.post('/ai/query', async (req, res) => {
   if (!query) return res.status(400).json({ error: 'Query string required' });
   const result = await aiService.handleAssistantQuery(query);
   res.json(result);
+});
+
+// ==========================================
+// 1. RBAC & AUTHENTICATION ENDPOINTS
+// ==========================================
+apiRouter.use(authenticate);
+
+apiRouter.get('/auth/me', (req: AuthenticatedRequest, res) => {
+  if (!req.user) {
+    // Default to EV_OWNER demo account if anonymous
+    const defaultUser = authService.getUserById('usr-owner-01');
+    return res.json({ user: defaultUser, authenticated: false });
+  }
+  res.json({ user: req.user, authenticated: true });
+});
+
+apiRouter.get('/auth/demo-users', (req, res) => {
+  res.json(authService.getAllDemoUsers());
+});
+
+apiRouter.post('/auth/switch-demo', (req, res) => {
+  const { role } = req.body;
+  if (!role) return res.status(400).json({ error: 'Role required' });
+  try {
+    const session = authService.switchRoleDemo(role);
+    res.json(session);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 2. EV VEHICLE OWNER ENDPOINTS
+// ==========================================
+apiRouter.get('/owner/vehicles', requireRole('EV_OWNER', 'PLATFORM_ADMIN'), (req: AuthenticatedRequest, res) => {
+  const allVehicles = vehicleService.getAllVehicles();
+  const assignedIds = req.user?.assignedVehicleIds;
+  if (req.user?.role === 'PLATFORM_ADMIN' || !assignedIds || assignedIds.length === 0) {
+    return res.json(allVehicles);
+  }
+  const filtered = allVehicles.filter(v => assignedIds.includes(v.id) || assignedIds.includes(v.code));
+  res.json(filtered.length > 0 ? filtered : allVehicles.slice(0, 2));
+});
+
+apiRouter.get('/owner/rescue-requests', requireRole('EV_OWNER', 'PLATFORM_ADMIN'), (req: AuthenticatedRequest, res) => {
+  const ownerId = req.user?.id || 'usr-owner-01';
+  if (req.user?.role === 'PLATFORM_ADMIN') {
+    return res.json(rescueService.getAllRequests());
+  }
+  res.json(rescueService.getRequestsByOwner(ownerId));
+});
+
+apiRouter.post('/owner/rescue-request', requireRole('EV_OWNER', 'PLATFORM_ADMIN'), (req: AuthenticatedRequest, res) => {
+  const { vehicleId, laneBlocked, shoulderAvailable, passengerCount, vulnerablePassengers, note } = req.body;
+  if (!vehicleId) return res.status(400).json({ error: 'vehicleId is required' });
+  try {
+    const request = rescueService.createRequest({
+      vehicleId,
+      ownerId: req.user?.id,
+      ownerName: req.user?.name,
+      laneBlocked,
+      shoulderAvailable,
+      passengerCount,
+      vulnerablePassengers,
+      note,
+    });
+    wsGateway.broadcastRescueUpdate(request);
+    res.status(201).json(request);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 3. EV MANUFACTURER ANALYTICS ENDPOINTS
+// ==========================================
+apiRouter.get('/manufacturer/analytics', requireRole('EV_MANUFACTURER', 'PLATFORM_ADMIN'), (req: AuthenticatedRequest, res) => {
+  const brand = (req.query.brand as string) || req.user?.manufacturerBrand || 'Tata Motors EV';
+  const analytics = manufacturerAnalyticsService.getAggregatedAnalytics(brand);
+  res.json(analytics);
+});
+
+// ==========================================
+// 4. STATION OWNER FINANCIAL & EXPANSION ENDPOINTS
+// ==========================================
+apiRouter.get('/station-owner/financials', requireRole('STATION_OWNER', 'PLATFORM_ADMIN'), (req: AuthenticatedRequest, res) => {
+  const financials = stationAnalyticsService.getStationFinancials();
+  const assignedStationIds = req.user?.assignedStationIds;
+  if (req.user?.role === 'PLATFORM_ADMIN' || !assignedStationIds || assignedStationIds.length === 0) {
+    return res.json(financials);
+  }
+  const filtered = financials.filter(f => assignedStationIds.includes(f.stationId));
+  res.json(filtered.length > 0 ? filtered : financials);
+});
+
+apiRouter.get('/station-owner/expansion-candidates', requireRole('STATION_OWNER', 'PLATFORM_ADMIN'), (req, res) => {
+  res.json(stationAnalyticsService.getExpansionCandidates());
+});
+
+apiRouter.get('/station-owner/alerts', requireRole('STATION_OWNER', 'PLATFORM_ADMIN'), (req, res) => {
+  res.json(stationAnalyticsService.getStationOwnerAlerts());
+});
+
+// ==========================================
+// 5. RESCUE OPERATOR & DISPATCH ENDPOINTS
+// ==========================================
+apiRouter.get('/rescue/requests', requireRole('RESCUE_OPERATOR', 'PLATFORM_ADMIN'), (req, res) => {
+  res.json(rescueService.getAllRequests());
+});
+
+apiRouter.get('/rescue/requests/:id', requireRole('RESCUE_OPERATOR', 'PLATFORM_ADMIN', 'EV_OWNER'), (req, res) => {
+  const reqObj = rescueService.getRequestById(req.params.id);
+  if (!reqObj) return res.status(404).json({ error: 'Rescue request not found' });
+  res.json(reqObj);
+});
+
+apiRouter.post('/rescue/dispatch', requireRole('RESCUE_OPERATOR', 'PLATFORM_ADMIN'), (req, res) => {
+  rescueService.evaluateAndDispatchQueue();
+  const allReqs = rescueService.getAllRequests();
+  wsGateway.broadcastRescueQueue(allReqs);
+  res.json({ success: true, requests: allReqs });
+});
+
+apiRouter.post('/rescue/complete', requireRole('RESCUE_OPERATOR', 'PLATFORM_ADMIN'), (req, res) => {
+  const { requestId } = req.body;
+  if (!requestId) return res.status(400).json({ error: 'requestId required' });
+  const result = rescueService.completeRescue(requestId);
+  if (!result) return res.status(404).json({ error: 'Rescue request not found' });
+  wsGateway.broadcastRescueUpdate(result);
+  wsGateway.broadcastRescueQueue(rescueService.getAllRequests());
+  res.json({ success: true, result });
+});
+
+apiRouter.post('/rescue/update-status', requireRole('RESCUE_OPERATOR', 'PLATFORM_ADMIN'), (req, res) => {
+  const { requestId, status, note } = req.body;
+  if (!requestId || !status) return res.status(400).json({ error: 'requestId and status required' });
+  const result = rescueService.updateRequestStatus(requestId, status, note);
+  if (!result) return res.status(404).json({ error: 'Rescue request not found' });
+  wsGateway.broadcastRescueUpdate(result);
+  wsGateway.broadcastRescueQueue(rescueService.getAllRequests());
+  res.json({ success: true, result });
+});
+
+apiRouter.post('/rescue/simulate-two-stranded', requireRole('RESCUE_OPERATOR', 'PLATFORM_ADMIN', 'EV_OWNER'), (req, res) => {
+  const scenario = rescueService.triggerTwoStrandedEvScenario();
+  wsGateway.broadcastRescueQueue(rescueService.getAllRequests());
+  res.json({
+    success: true,
+    message: 'Triggered Critical Scenario: 2 Stranded EVs (EV-024 in active lane, EV-057 on shoulder), 1 Towing Van (EV-PATROL-03). Priority queue evaluated and van atomically assigned to EV-024.',
+    scenario,
+  });
+});
+
+apiRouter.get('/rescue/providers', requireRole('RESCUE_OPERATOR', 'PLATFORM_ADMIN'), (req, res) => {
+  res.json(rescueService.getProviders());
 });
 
 app.use('/api', apiRouter);

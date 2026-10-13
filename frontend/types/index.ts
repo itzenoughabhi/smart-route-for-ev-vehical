@@ -282,3 +282,205 @@ export interface NetworkKPIs {
   serviceVehicles: number;
   homeChargingVehicles: number;
 }
+
+export type UserRole = 
+  | 'EV_OWNER'
+  | 'EV_MANUFACTURER'
+  | 'STATION_OWNER'
+  | 'RESCUE_OPERATOR'
+  | 'PLATFORM_ADMIN';
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  organization?: string;
+  assignedVehicleIds?: string[];
+  assignedStationIds?: string[];
+  manufacturerBrand?: string;
+  rescueProviderId?: string;
+}
+
+export type RescueStatus =
+  | 'REQUESTED'
+  | 'PRIORITY_ASSESSED'
+  | 'ASSIGNED'
+  | 'PROVIDER_EN_ROUTE'
+  | 'ARRIVED'
+  | 'RESCUE_IN_PROGRESS'
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | 'UNAVAILABLE';
+
+export interface RescueRequest {
+  id: string;
+  vehicleId: string;
+  vehicleCode: string;
+  vehicleModel: string;
+  ownerId?: string;
+  ownerName: string;
+  location: { x: number; y: number; z: number };
+  locationName: string;
+  roadName: string;
+  batterySoc: number;
+  laneBlocked: boolean;
+  shoulderAvailable: boolean;
+  hazardLightsOn: boolean;
+  passengerCount: number;
+  vulnerablePassengers: boolean;
+  weatherRisk: boolean;
+  trafficSpeedKmh: number;
+  priorityScore: number;
+  priorityLevel: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  priorityFactors: string[];
+  status: RescueStatus;
+  assignedProviderId?: string;
+  assignedProviderName?: string;
+  assignedVehicleId?: string;
+  assignedVehicleCode?: string;
+  assignedAt?: string;
+  targetStationId?: string;
+  targetStationName?: string;
+  queuePosition?: number;
+  estimatedArrivalMinutes?: number;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  auditLog: Array<{
+    timestamp: string;
+    status: RescueStatus;
+    note: string;
+  }>;
+}
+
+export interface RescueProvider {
+  id: string;
+  name: string;
+  contactNumber: string;
+  coverageRegion: string[];
+  vehicleTypesSupported: string[];
+  activeTowVehicles: Array<{
+    vehicleId: string;
+    code: string;
+    model: string;
+    status: 'AVAILABLE' | 'BUSY' | 'MAINTENANCE' | 'OFFLINE';
+    currentIncidentId?: string;
+    capacityTon: number;
+  }>;
+}
+
+export interface StationFinancialMetric {
+  stationId: string;
+  stationCode: string;
+  stationName: string;
+  district: string;
+  totalBays: number;
+  availableBays: number;
+  occupancyPct: number;
+  queueLength: number;
+  uptimePct: number;
+  avgChargingDurationMin: number;
+  avgWaitTimeMin: number;
+  peakHour: string;
+  dailyEnergyDeliveredKwh: number;
+  monthlyEnergyDeliveredKwh: number;
+  grossRevenueMonthly: number;
+  wholesaleElectricityCostMonthly: number;
+  grossMarginMonthly: number;
+  grossMarginPct: number;
+  opexBreakdown: {
+    electricityCost: number;
+    demandCharges: number;
+    maintenance: number;
+    rentAndLease: number;
+    staffing: number;
+    networkFees: number;
+  };
+  totalOpexMonthly: number;
+  netOperatingProfitMonthly: number;
+  operatingMarginPct: number;
+  revenuePerBayMonthly: number;
+  profitPerBayMonthly: number;
+  estimatedCapitalInvested: number;
+  estimatedPaybackPeriodMonths: number;
+  annualizedRoiPct: number;
+  profitabilityRank: number;
+}
+
+export interface ExpansionCandidate {
+  id: string;
+  name: string;
+  locationArea: string;
+  zoneType: 'INDUSTRIAL_TRANSIT' | 'HIGHWAY_INTERCHANGE' | 'URBAN_RAILWAY' | 'COASTAL_TOURISM';
+  targetBaysCount: number;
+  transformerCapacityKva: number;
+  estimatedDailyTrafficEVs: number;
+  projectedDailySessions: number;
+  projectedMonthlyEnergyKwh: number;
+  initialCapex: number;
+  capexBreakdown: {
+    chargers: number;
+    transformerAndGrid: number;
+    civilAndCanopy: number;
+    licensingAndApprovals: number;
+  };
+  projectedMonthlyRevenue: number;
+  projectedMonthlyOpex: number;
+  projectedMonthlyNetProfit: number;
+  estimatedPaybackMonths: number;
+  gridReadinessScore: number;
+  competitionDensity: 'LOW' | 'MEDIUM' | 'HIGH';
+  recommendationRank: number;
+  recommendationReason: string;
+}
+
+export interface StationOwnerAlert {
+  id: string;
+  stationCode: string;
+  type: 'QUEUE_SPIKE' | 'CHARGER_FAULT' | 'LOW_UTILIZATION' | 'EXPANSION_OPPORTUNITY' | 'COST_SURGE';
+  severity: 'WARNING' | 'CRITICAL' | 'INFO';
+  title: string;
+  message: string;
+  timestamp: string;
+}
+
+export interface ManufacturerFleetAnalytics {
+  brand: string;
+  anonymizedFleetCount: number;
+  regionalAdoption: Array<{
+    region: string;
+    totalRegisteredEVs: number;
+    growthRateYoY: number;
+    brandMarketSharePct: Record<string, number>;
+    topModels: Array<{ model: string; count: number; sharePct: number }>;
+  }>;
+  batteryHealthByModel: Array<{
+    model: string;
+    sampleSize: number;
+    avgSOHPct: number;
+    avgRangeRetentionPct: number;
+    degradationPer10kKmPct: number;
+    fastChargeExposurePct: number;
+    avgBatteryTempCelsius: number;
+  }>;
+  incidentHotspots: Array<{
+    corridorName: string;
+    region: string;
+    incidentCount: number;
+    primaryCause: string;
+    avgResponseTimeMin: number;
+    severityDistribution: { critical: number; warning: number; info: number };
+  }>;
+  chargingPatterns: Array<{
+    hourOfDay: number;
+    avgSessionDurationMin: number;
+    avgEnergyDeliveredKwh: number;
+    preferredChargerType: '150kW_DC' | '350kW_DC' | 'AC_SLOW';
+    avgStartingSocPct: number;
+    avgEndingSocPct: number;
+  }>;
+  underservedZones: Array<{ zone: string; evDensity: string; chargerGap: string; priority: string }>;
+  privacyNotice: string;
+}
+

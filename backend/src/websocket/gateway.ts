@@ -7,6 +7,7 @@ import { eventService } from '../modules/events/event.service';
 import { aiService } from '../modules/ai/ai.service';
 import { simulationEngine } from '../modules/simulation/simulation.engine';
 import { trafficController } from '../modules/simulation/traffic.controller';
+import { rescueService } from '../modules/rescue/rescue.service';
 import { LiveEvent } from '../types';
 
 export class WebSocketGateway {
@@ -250,6 +251,34 @@ export class WebSocketGateway {
         this.io.emit('recommendations', aiService.getPendingRecommendations());
       });
 
+      socket.on('rescue:create', (payload: any) => {
+        try {
+          const req = rescueService.createRequest(payload);
+          this.broadcastRescueUpdate(req);
+          this.broadcastRescueQueue(rescueService.getAllRequests());
+        } catch (err: any) {
+          socket.emit('rescue:error', { message: err.message });
+        }
+      });
+
+      socket.on('rescue:dispatch', () => {
+        rescueService.evaluateAndDispatchQueue();
+        this.broadcastRescueQueue(rescueService.getAllRequests());
+      });
+
+      socket.on('rescue:complete', (payload: { requestId: string }) => {
+        const req = rescueService.completeRescue(payload.requestId);
+        if (req) {
+          this.broadcastRescueUpdate(req);
+          this.broadcastRescueQueue(rescueService.getAllRequests());
+        }
+      });
+
+      socket.on('rescue:simulate-two-stranded', () => {
+        rescueService.triggerTwoStrandedEvScenario();
+        this.broadcastRescueQueue(rescueService.getAllRequests());
+      });
+
       socket.on('disconnect', () => {
         console.log(`❌ [WebSocket] Client disconnected: ${socket.id}`);
       });
@@ -293,6 +322,7 @@ export class WebSocketGateway {
       homeChargers: stationService.getAllHomeChargers(),
       events: eventService.getEvents(25),
       recommendations: aiService.getPendingRecommendations(),
+      rescueRequests: rescueService.getAllRequests(),
       simulation: {
         isRunning: simulationEngine.isEngineRunning(),
         speed: simulationEngine.getSpeed(),
@@ -306,5 +336,13 @@ export class WebSocketGateway {
 
   public broadcastVehicleUpdate(vehicle: any) {
     this.io.emit('vehicle.updated', vehicle);
+  }
+
+  public broadcastRescueUpdate(rescueRequest: any) {
+    this.io.emit('rescue.updated', rescueRequest);
+  }
+
+  public broadcastRescueQueue(requests: any[]) {
+    this.io.emit('rescue.queue', requests);
   }
 }

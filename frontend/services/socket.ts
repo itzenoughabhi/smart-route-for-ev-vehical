@@ -69,6 +69,14 @@ class SocketService {
       useDigitalTwinStore.setState({ powerGrid });
     });
 
+    this.socket.on('rescue.updated', (rescueRequest) => {
+      useDigitalTwinStore.getState().updateRescueRequest(rescueRequest);
+    });
+
+    this.socket.on('rescue.queue', (requests) => {
+      useDigitalTwinStore.getState().setRescueRequests(requests);
+    });
+
     this.socket.on('connect_error', (err) => {
       console.warn('[SocketService] Connection error:', err.message);
       this.isConnecting = false;
@@ -196,6 +204,22 @@ class SocketService {
         confidence: 0.85,
       };
     }
+  }
+
+  public createRescueRequest(payload: any) {
+    this.emit('rescue:create', payload);
+  }
+
+  public dispatchRescue() {
+    this.emit('rescue:dispatch');
+  }
+
+  public completeRescue(requestId: string) {
+    this.emit('rescue:complete', { requestId });
+  }
+
+  public simulateTwoStranded() {
+    this.emit('rescue:simulate-two-stranded');
   }
 }
 

@@ -175,3 +175,73 @@ model SimulationState {
   totalEvsCount   Int      @default(12)
   updatedAt       DateTime @updatedAt
 }
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  role         String   @default("EV_OWNER") // EV_OWNER, EV_MANUFACTURER, STATION_OWNER, RESCUE_OPERATOR, PLATFORM_ADMIN
+  organization String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model RescueProvider {
+  id             String   @id @default(uuid())
+  name           String
+  contactNumber  String
+  coverageRegion String   // JSON array or comma separated
+  isAvailable    Boolean  @default(true)
+  createdAt      DateTime @default(now())
+}
+
+model RescueRequest {
+  id                  String    @id @default(uuid())
+  vehicleId           String
+  vehicleCode         String
+  ownerId             String?
+  ownerName           String    @default("EV Owner")
+  locationX           Float     @default(0.0)
+  locationY           Float     @default(0.0)
+  locationZ           Float     @default(0.0)
+  locationName        String
+  laneBlocked         Boolean   @default(true)
+  shoulderAvailable   Boolean   @default(false)
+  priorityScore       Int       @default(50)
+  priorityLevel       String    @default("HIGH") // CRITICAL, HIGH, MEDIUM, LOW
+  status              String    @default("REQUESTED") // REQUESTED, PRIORITY_ASSESSED, ASSIGNED, COMPLETED, CANCELLED
+  assignedProviderId  String?
+  assignedVehicleCode String?
+  queuePosition       Int       @default(0)
+  etaMinutes          Float     @default(10.0)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  completedAt         DateTime?
+}
+
+model StationOperatingCost {
+  id              String   @id @default(uuid())
+  stationId       String
+  wholesaleTariff Float    @default(7.8)
+  demandCharge    Float    @default(240.0)
+  maintenanceCost Float    @default(3500.0)
+  rentLease       Float    @default(25000.0)
+  staffingCost    Float    @default(20000.0)
+  month           String   // e.g. "2026-10"
+  createdAt       DateTime @default(now())
+}
+
+model StationExpansionCandidate {
+  id               String   @id @default(uuid())
+  name             String
+  locationArea     String
+  zoneType         String
+  targetBaysCount  Int      @default(4)
+  initialCapex     Float    @default(6000000.0)
+  projectedRevenue Float    @default(700000.0)
+  projectedOpex    Float    @default(350000.0)
+  paybackMonths    Float    @default(18.0)
+  gridScore        Int      @default(85)
+  createdAt        DateTime @default(now())
+}
+

@@ -162,6 +162,15 @@ export function TopBar() {
 
           <div className="flex items-center gap-2">
             <button
+              onClick={() => useDigitalTwinStore.getState().openStakeholderDashboard('EV_OWNER')}
+              title="Role-Based Stakeholder Dashboards"
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition-all shadow-md shadow-blue-500/20 flex items-center gap-1.5 pointer-events-auto"
+            >
+              <span>📊</span>
+              <span className="hidden sm:inline">Dashboards</span>
+            </button>
+
+            <button
               onClick={() => toggleSimDrawer()}
               title="Simulation Controls"
               className="bg-white/40 hover:bg-white/65 backdrop-blur-xl border border-white/60 p-2 rounded-xl text-slate-600 hover:text-slate-900 transition-all shadow-sm"

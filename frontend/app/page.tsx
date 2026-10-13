@@ -19,6 +19,7 @@ import { SimulationDrawer } from '../components/SimulationDrawer';
 import { TwoDMapOverlay } from '../components/TwoDMapOverlay';
 import { SwipableDistrictDock } from '../components/SwipableDistrictDock';
 import { WorldValidationModal } from '../components/WorldValidationModal';
+import { StakeholderModal } from '../components/dashboards/StakeholderModal';
 
 const MapLibreBoisarMap = dynamic(
   () => import('../components/MapLibreBoisarMap').then((mod) => mod.MapLibreBoisarMap),
@@ -99,6 +100,7 @@ export default function Home() {
       <TwoDMapOverlay />
 
       <WorldValidationModal isOpen={isAuditModalOpen} onClose={() => toggleAuditModal(false)} />
+      <StakeholderModal />
     </main>
   );
 }
