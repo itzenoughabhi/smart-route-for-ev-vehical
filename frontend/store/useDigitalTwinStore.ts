@@ -81,6 +81,7 @@ interface DigitalTwinState {
   setExpansionCandidates: (candidates: ExpansionCandidate[]) => void;
   setStationAlerts: (alerts: StationOwnerAlert[]) => void;
   setManufacturerAnalytics: (analytics: ManufacturerFleetAnalytics) => void;
+  assignVehicleToUser: (vehicleIdOrCode: string, email?: string, name?: string) => void;
 
   isManualDrive: boolean;
   manualDriveVehicleId: string | null;
@@ -304,6 +305,38 @@ export const useDigitalTwinStore = create<DigitalTwinState>((set, get) => ({
   setExpansionCandidates: (expansionCandidates) => set({ expansionCandidates }),
   setStationAlerts: (stationAlerts) => set({ stationAlerts }),
   setManufacturerAnalytics: (manufacturerAnalytics) => set({ manufacturerAnalytics }),
+  assignVehicleToUser: (vehicleIdOrCode, email, name) => {
+    set((state) => {
+      const targetVeh = state.vehicles.find(
+        (v) => v.id === vehicleIdOrCode || v.code.toLowerCase() === vehicleIdOrCode.toLowerCase()
+      );
+      const vehicleKey = targetVeh ? targetVeh.id : vehicleIdOrCode;
+      const userEmail = email || state.currentUser?.email || 'owner@evnexus.io';
+      const userName = name || (email ? email.split('@')[0] : state.currentUser?.name) || 'EV Driver';
+
+      const updatedUser = {
+        ...(state.currentUser || {
+          id: `usr-${Date.now()}`,
+          role: 'EV_OWNER' as const,
+          organization: 'Private EV Owner',
+          createdAt: new Date().toISOString(),
+        }),
+        email: userEmail,
+        name: userName,
+        role: 'EV_OWNER' as const,
+        assignedVehicleIds: [vehicleKey, ...(state.currentUser?.assignedVehicleIds || [])],
+      };
+
+      return {
+        currentUser: updatedUser,
+        trackingVehicleId: vehicleKey,
+        selectedObject: targetVeh ? { type: 'vehicle', id: targetVeh.id, data: targetVeh } : state.selectedObject,
+        cameraMode: 'VEHICLE',
+        cameraTarget: targetVeh ? [targetVeh.position.x, 1, targetVeh.position.z] : state.cameraTarget,
+        cameraPosition: targetVeh ? [targetVeh.position.x, 14, targetVeh.position.z + 18] : state.cameraPosition,
+      };
+    });
+  },
 
   isManualDrive: false,
   manualDriveVehicleId: null,

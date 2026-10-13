@@ -238,6 +238,31 @@ apiRouter.post('/auth/switch-demo', (req, res) => {
   }
 });
 
+apiRouter.post('/auth/login', (req, res) => {
+  const { email, password } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email required' });
+  try {
+    const session = authService.loginOrRegister(email, password);
+    res.json(session);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+apiRouter.post('/auth/assign-vehicle', (req, res) => {
+  const { email, vehicleId, vehicleCode, password } = req.body;
+  const targetVehicle = vehicleId || vehicleCode;
+  if (!email || !targetVehicle) {
+    return res.status(400).json({ error: 'Email and vehicleId or vehicleCode are required' });
+  }
+  try {
+    const result = authService.assignVehicleToUser(email, targetVehicle, password);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // ==========================================
 // 2. EV VEHICLE OWNER ENDPOINTS
 // ==========================================

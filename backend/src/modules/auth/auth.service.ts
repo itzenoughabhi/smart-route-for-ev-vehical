@@ -118,6 +118,40 @@ export class AuthService {
     if (!user) throw new Error(`Demo user for role ${role} not found`);
     return this.createSession(user);
   }
+
+  public loginOrRegister(email: string, password?: string): AuthSession {
+    const cleanEmail = email.trim().toLowerCase();
+    let user = this.getUserByEmail(cleanEmail);
+    if (!user) {
+      // Create user on-the-fly for seamless login
+      const name = cleanEmail.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      user = {
+        id: `usr-${Date.now()}`,
+        email: cleanEmail,
+        name,
+        role: 'EV_OWNER',
+        organization: 'Private EV Owner',
+        assignedVehicleIds: ['veh-ev-057'],
+        createdAt: new Date().toISOString(),
+      };
+      this.users.set(user.id, user);
+    }
+    return this.createSession(user);
+  }
+
+  public assignVehicleToUser(email: string, vehicleIdOrCode: string, password?: string): { user: User; session: AuthSession } {
+    const session = this.loginOrRegister(email, password);
+    const user = session.user;
+    
+    // Set this vehicle as primary assigned vehicle
+    const currentList = user.assignedVehicleIds || [];
+    const updatedVehicles = Array.from(new Set([vehicleIdOrCode, ...currentList]));
+    user.assignedVehicleIds = updatedVehicles;
+    this.users.set(user.id, user);
+    session.user = user;
+    
+    return { user, session };
+  }
 }
 
 export const authService = AuthService.getInstance();
