@@ -7,6 +7,8 @@ import * as THREE from 'three';
 import { Vehicle } from '../../types';
 import { useDigitalTwinStore } from '../../store/useDigitalTwinStore';
 
+import { ARNavigationRibbon } from './ARNavigationRibbon';
+
 interface ModelSpec {
   path: string;
   scale: number;
@@ -59,8 +61,18 @@ const VehicleGLBModel = React.memo(function VehicleGLBModel({ model }: { model: 
 
   useEffect(() => {
     scene.traverse((child: any) => {
-      if (child.isMesh && child.geometry && !child.geometry.attributes.normal) {
-        child.geometry.computeVertexNormals();
+      if (child.isMesh) {
+        if (child.geometry && !child.geometry.attributes.normal) {
+          child.geometry.computeVertexNormals();
+        }
+        const name = child.name?.toLowerCase() || '';
+        if (name.includes('glass') || name.includes('window') || name.includes('windshield')) {
+          if (child.material) {
+            child.material.transparent = true;
+            child.material.opacity = 0.25;
+            child.material.depthWrite = false;
+          }
+        }
       }
     });
   }, [scene]);
@@ -134,12 +146,14 @@ const SelectedVehicleBadge = React.memo(function SelectedVehicleBadge({ vehicleI
   const isStranded = liveVehicle.status === 'STRANDED' || batteryPct <= 0;
   const isBeingTowed = liveVehicle.status === 'BEING_TOWED' || liveVehicle.trafficState === 'BEING_TOWED';
   const isTowing = liveVehicle.trafficState === 'TOWING';
+  const isOvertaking = liveVehicle.trafficState === 'OVERTAKING';
   const isLowBattery = batteryPct <= 20;
   const isCriticalBattery = batteryPct <= 10;
 
   const getStatusIcon = () => {
     if (isStranded) return '🛑';
     if (isBeingTowed || isTowing) return '🛻';
+    if (isOvertaking) return '🏎️';
     if (hasFault) return '🚨';
     if (isUnderRepair) return '🔧';
     if (isCharging) return '⚡';
@@ -161,6 +175,8 @@ const SelectedVehicleBadge = React.memo(function SelectedVehicleBadge({ vehicleI
             ? 'bg-red-700 text-white border-red-500 shadow-md ring-2 ring-red-400 animate-pulse'
             : isBeingTowed || isTowing
             ? 'bg-amber-600 text-white border-amber-400 ring-2 ring-amber-300 animate-pulse'
+            : isOvertaking
+            ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-white border-yellow-300 shadow-lg shadow-orange-500/40 ring-2 ring-yellow-300 animate-pulse font-bold'
             : hasFault || isCriticalBattery
             ? 'bg-red-600 text-white border-red-500 shadow-md ring-2 ring-red-300 animate-pulse'
             : isUnderRepair || isLowBattery
@@ -172,7 +188,7 @@ const SelectedVehicleBadge = React.memo(function SelectedVehicleBadge({ vehicleI
         <span>{getStatusIcon()}</span>
         <span className="font-semibold">
           {liveVehicle.code}
-          {isStranded ? ' (0% STRANDED)' : isBeingTowed ? ' (TOWED)' : isTowing ? ' (TOW TRUCK)' : ''}
+          {isStranded ? ' (0% STRANDED)' : isBeingTowed ? ' (TOWED)' : isTowing ? ' (TOW TRUCK)' : isOvertaking ? ' (OVERTAKING)' : ''}
         </span>
         <span className={`text-[9px] font-mono ${
           isStranded || isCriticalBattery 
@@ -188,7 +204,14 @@ const SelectedVehicleBadge = React.memo(function SelectedVehicleBadge({ vehicleI
   );
 });
 
-const VehicleItem = React.memo(function VehicleItem({ vehicle }: { vehicle: Vehicle }) {
+const VehicleItem = React.memo(function VehicleItem({ 
+  vehicle,
+  inCabinVehicleId,
+}: { 
+  vehicle: Vehicle;
+  inCabinVehicleId?: string;
+}) {
+  const isInCabinThisVehicle = inCabinVehicleId === vehicle.id;
   const selectVehicle = useDigitalTwinStore((s) => s.selectVehicle);
   const selectedObject = useDigitalTwinStore((s) => s.selectedObject);
   const isSelected = selectedObject?.type === 'vehicle' && selectedObject.id === vehicle.id;
@@ -249,7 +272,14 @@ const VehicleItem = React.memo(function VehicleItem({ vehicle }: { vehicle: Vehi
       targetRef.current.heading = liveVeh.heading || 0;
       targetRef.current.speed = liveVeh.speed || 0;
       targetRef.current.status = liveVeh.status;
-      targetRef.current.isMoving = liveVeh.speed > 0;
+      targetRef.current.isMoving = liveVeh.speed > 0.1 && (
+        liveVeh.status === 'EN_ROUTE' ||
+        liveVeh.status === 'DEPARTING' ||
+        liveVeh.status === 'ENTERING_STATION' ||
+        liveVeh.status === 'REVERSE_PARKING' ||
+        liveVeh.status === 'LEAVING_STATION' ||
+        liveVeh.status === 'MANUAL_DRIVE'
+      );
     }
     const target = targetRef.current;
 
@@ -260,54 +290,35 @@ const VehicleItem = React.memo(function VehicleItem({ vehicle }: { vehicle: Vehi
       groupRef.current.rotation.y = target.heading || 0;
     }
 
-    const trackingRate = target.isMoving ? 11.0 * currentSimSpeed : 8.0;
-    const factor = 1 - Math.exp(-trackingRate * clampedDelta);
+    // 1. Smooth, natural turn rotation (shortest angular path with exponential dampening)
+    let diff = target.heading - groupRef.current.rotation.y;
+    diff = THREE.MathUtils.euclideanModulo(diff + Math.PI, Math.PI * 2) - Math.PI;
+    const turnRate = Math.abs(diff) > 0.4 ? 10.0 : 7.5;
+    groupRef.current.rotation.y += diff * (1 - Math.exp(-turnRate * clampedDelta));
 
+    // 2. High-precision critically damped positional glide (zero wobble, zero snapping, zero drift)
     const errX = target.x - groupRef.current.position.x;
     const errZ = target.z - groupRef.current.position.z;
     const distSq = errX * errX + errZ * errZ;
 
-    if (distSq > 49) {
+    if (distSq > 100) {
       groupRef.current.position.x = target.x;
       groupRef.current.position.z = target.z;
+      groupRef.current.rotation.y = target.heading;
     } else {
-      groupRef.current.position.x += errX * factor;
-      groupRef.current.position.z += errZ * factor;
+      // Critically damped tracking: perfectly bridges the 100ms server tick interval at silky smooth 60 FPS
+      const trackSpeed = target.isMoving ? 14.0 : 20.0;
+      const blend = 1 - Math.exp(-trackSpeed * clampedDelta);
+      groupRef.current.position.x += errX * blend;
+      groupRef.current.position.z += errZ * blend;
     }
 
-    groupRef.current.position.y += (target.y - groupRef.current.position.y) * factor;
-
-    let diff = target.heading - groupRef.current.rotation.y;
-    diff = THREE.MathUtils.euclideanModulo(diff + Math.PI, Math.PI * 2) - Math.PI;
-    groupRef.current.rotation.y += diff * factor;
-
-    // Visual Anti-Penetration: Prevents mesh overlapping only between same-direction vehicles in the same lane
-    // NEVER push oncoming vehicles in opposite lanes across the road divider!
-    const allVehs = useDigitalTwinStore.getState().vehicles || [];
-    for (let i = 0; i < allVehs.length; i++) {
-      const ov = allVehs[i];
-      if (!ov || ov.id === vehicle.id) continue;
-      const dx = groupRef.current.position.x - ov.position.x;
-      const dz = groupRef.current.position.z - ov.position.z;
-      const d = Math.hypot(dx, dz);
-
-      // Check alignment: if vehicles are oncoming (opposite directions across divider), do NOT push sideways!
-      const headingDot = Math.cos((vehicle.heading || 0) - (ov.heading || 0));
-      if (headingDot < -0.2) {
-        // Oncoming traffic in opposite lanes: strictly maintain lane trajectory without lateral deviation
-        continue;
-      }
-
-      // Only gently nudge same-direction vehicles if physical bounding boxes touch
-      const isBig = vehicle.model?.includes('Bus') || vehicle.model?.includes('Hauler');
-      const otherBig = ov.model?.includes('Bus') || ov.model?.includes('Hauler');
-      const minTouchGap = (isBig || otherBig) ? 3.8 : 2.2;
-      if (d < minTouchGap && d > 0.1) {
-        const push = (minTouchGap - d) * factor * 0.25;
-        groupRef.current.position.x += (dx / d) * push;
-        groupRef.current.position.z += (dz / d) * push;
-      }
-    }
+    groupRef.current.position.y = THREE.MathUtils.damp(
+      groupRef.current.position.y,
+      target.y,
+      12.0,
+      clampedDelta
+    );
   });
 
   const isCharging = vehicle.status === 'CHARGING';
@@ -315,7 +326,6 @@ const VehicleItem = React.memo(function VehicleItem({ vehicle }: { vehicle: Vehi
   const isUnderRepair = vehicle.status === 'UNDER_REPAIR';
   const isQueue = vehicle.status === 'QUEUE';
 
-  // Hook must ALWAYS be called unconditionally to preserve React hook ordering!
   const towVehicle = useDigitalTwinStore((s) =>
     vehicle.towedByVehicleId && Array.isArray(s.vehicles)
       ? s.vehicles.find((v) => v.id === vehicle.towedByVehicleId) || null
@@ -352,15 +362,6 @@ const VehicleItem = React.memo(function VehicleItem({ vehicle }: { vehicle: Vehi
     return pts.length > 1 ? pts : null;
   }, [isSelected, isCharging, isQueue, isUnderRepair, vehicle?.status, vehicle?.position?.x, vehicle?.position?.z, vehicle?.routeWaypoints, vehicle?.currentWaypointIndex]);
 
-  const getStatusIcon = () => {
-    if (hasFault) return '🚨';
-    if (isUnderRepair) return '🔧';
-    if (isCharging) return '⚡';
-    if (isQueue) return '⏳';
-    if (vehicle.status === 'ENTERING_STATION' || vehicle.status === 'REVERSE_PARKING') return '🅿️';
-    return '🚗';
-  };
-
   return (
     <>
       {towVehicle && towVehicle.position && vehicle.position && (
@@ -374,7 +375,12 @@ const VehicleItem = React.memo(function VehicleItem({ vehicle }: { vehicle: Vehi
         />
       )}
 
-      {routePoints && routePoints.length > 1 && (
+      {/* AR Navigation Ribbon on road for In-Cabin vehicle */}
+      {isInCabinThisVehicle && (
+        <ARNavigationRibbon vehicleId={vehicle.id} />
+      )}
+
+      {routePoints && !isInCabinThisVehicle && routePoints.length > 1 && (
         <Line
           points={routePoints}
           color={hasFault ? '#ef4444' : '#2563eb'}
@@ -386,7 +392,10 @@ const VehicleItem = React.memo(function VehicleItem({ vehicle }: { vehicle: Vehi
 
       <group
         ref={groupRef}
+        name={`vehicle-${vehicle.id}`}
+        userData={{ isVehicle: true, vehicleId: vehicle.id }}
         onClick={(e) => {
+          if (inCabinVehicleId) return;
           e.stopPropagation();
           selectVehicle(vehicle.id);
         }}
@@ -395,7 +404,7 @@ const VehicleItem = React.memo(function VehicleItem({ vehicle }: { vehicle: Vehi
           <VehicleGLBModel model={vehicle.model} />
         </Suspense>
 
-        {isSelected && (
+        {isSelected && !inCabinVehicleId && (
           <mesh position={[0, 0.015, 0]} rotation={[-Math.PI / 2, 0, 0]}>
             <ringGeometry args={[1.35, 1.5, 32]} />
             <meshBasicMaterial
@@ -406,7 +415,7 @@ const VehicleItem = React.memo(function VehicleItem({ vehicle }: { vehicle: Vehi
           </mesh>
         )}
 
-        {isSelected && (
+        {isSelected && !inCabinVehicleId && (
           <SelectedVehicleBadge vehicleId={vehicle.id} />
         )}
       </group>
@@ -415,6 +424,7 @@ const VehicleItem = React.memo(function VehicleItem({ vehicle }: { vehicle: Vehi
 }, (prev, next) => {
   return (
     prev.vehicle.id === next.vehicle.id &&
+    prev.inCabinVehicleId === next.inCabinVehicleId &&
     prev.vehicle.status === next.vehicle.status &&
     prev.vehicle.model === next.vehicle.model &&
     prev.vehicle.vehicleHealth === next.vehicle.vehicleHealth &&
@@ -425,13 +435,13 @@ const VehicleItem = React.memo(function VehicleItem({ vehicle }: { vehicle: Vehi
   );
 });
 
-export function VehicleFleet() {
+export function VehicleFleet({ inCabinVehicleId }: { inCabinVehicleId?: string }) {
   const vehicles = useDigitalTwinStore((s) => s.vehicles) || [];
 
   return (
     <group name="VehicleFleet">
       {vehicles.map((vehicle) => (
-        <VehicleItem key={vehicle.id} vehicle={vehicle} />
+        <VehicleItem key={vehicle.id} vehicle={vehicle} inCabinVehicleId={inCabinVehicleId} />
       ))}
     </group>
   );

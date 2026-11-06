@@ -191,12 +191,13 @@ export function findForwardNodeId(pos: Position3D, heading?: number): string {
   let bestId: string | null = null;
   let bestScore = Infinity;
 
+  // Pass 1: Strict forward alignment (> 0.05) within 180m
   for (const [id, node] of Object.entries(ROAD_NODES)) {
     if (id.includes('BAY') || id.includes('ENTRANCE')) continue;
     const dx = node.x - pos.x;
     const dz = node.z - pos.z;
     const dist = Math.hypot(dx, dz);
-    if (dist < 1.5 || dist > 80.0) continue;
+    if (dist < 0.2 || dist > 180.0) continue;
 
     const forwardAlignment = (dx * fX + dz * fZ) / dist;
     if (forwardAlignment > 0.05) {
@@ -208,29 +209,183 @@ export function findForwardNodeId(pos: Position3D, heading?: number): string {
     }
   }
 
+  if (bestId) return bestId;
+
+  // Pass 2: Relaxed forward alignment (>= -0.15) to avoid selecting nodes directly behind
+  for (const [id, node] of Object.entries(ROAD_NODES)) {
+    if (id.includes('BAY') || id.includes('ENTRANCE')) continue;
+    const dx = node.x - pos.x;
+    const dz = node.z - pos.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 0.2 || dist > 250.0) continue;
+
+    const forwardAlignment = (dx * fX + dz * fZ) / dist;
+    if (forwardAlignment >= -0.15) {
+      const score = dist * (2.5 - forwardAlignment);
+      if (score < bestScore) {
+        bestScore = score;
+        bestId = id;
+      }
+    }
+  }
+
   return bestId || findNearestNodeId(pos, false);
 }
 
-function catmullRomPoint(
-  p0: Position3D,
-  p1: Position3D,
-  p2: Position3D,
-  p3: Position3D,
-  t: number
-): Position3D {
-  const t2 = t * t;
-  const t3 = t2 * t;
+function buildFilletRoadPath(
+  points: Position3D[],
+  maxCornerRadius: number = 5.5,
+  stepSize: number = 1.2
+): Position3D[] {
+  if (points.length < 2) return points;
+  if (points.length === 2) {
+    const pA = points[0];
+    const pB = points[1];
+    const dist = Math.hypot(pB.x - pA.x, pB.z - pA.z);
+    const steps = Math.max(2, Math.ceil(dist / stepSize));
+    const result: Position3D[] = [];
+    for (let s = 0; s <= steps; s++) {
+      const t = s / steps;
+      result.push({
+        x: Number((pA.x + (pB.x - pA.x) * t).toFixed(2)),
+        y: Number(((pA.y || 0) + ((pB.y || 0) - (pA.y || 0)) * t).toFixed(2)),
+        z: Number((pA.z + (pB.z - pA.z) * t).toFixed(2)),
+      });
+    }
+    return result;
+  }
 
-  const f0 = -0.5 * t3 + t2 - 0.5 * t;
-  const f1 = 1.5 * t3 - 2.5 * t2 + 1.0;
-  const f2 = -1.5 * t3 + 2.0 * t2 + 0.5 * t;
-  const f3 = 0.5 * t3 - 0.5 * t2;
+  interface CornerFillet {
+    entry: Position3D;
+    corner: Position3D;
+    exit: Position3D;
+    arcPoints?: Position3D[];
+  }
 
-  return {
-    x: Number((p0.x * f0 + p1.x * f1 + p2.x * f2 + p3.x * f3).toFixed(2)),
-    y: 0,
-    z: Number((p0.z * f0 + p1.z * f1 + p2.z * f2 + p3.z * f3).toFixed(2)),
-  };
+  const fillets: (CornerFillet | null)[] = new Array(points.length).fill(null);
+
+  for (let i = 1; i < points.length - 1; i++) {
+    const pPrev = points[i - 1];
+    const pCurr = points[i];
+    const pNext = points[i + 1];
+
+    const v1x = pCurr.x - pPrev.x;
+    const v1z = pCurr.z - pPrev.z;
+    const len1 = Math.hypot(v1x, v1z);
+
+    const v2x = pNext.x - pCurr.x;
+    const v2z = pNext.z - pCurr.z;
+    const len2 = Math.hypot(v2x, v2z);
+
+    if (len1 < 0.6 || len2 < 0.6) continue;
+
+    const u1x = v1x / len1;
+    const u1z = v1z / len1;
+    const u2x = v2x / len2;
+    const u2z = v2z / len2;
+
+    const dot = u1x * u2x + u1z * u2z;
+    if (dot > 0.998) continue; // practically straight
+
+    if (dot < -0.80) {
+      // 180° Road Reversal / Corridor Terminus U-Turn
+      // Generate a smooth wide semi-circular turnaround bulb extending along the lane normal
+      const turnRadius = Math.max(4.8, Math.min(7.5, len1 * 0.35, len2 * 0.35));
+      const n1x = -u1z;
+      const n1z = u1x;
+      const bulbWidth = Math.max(5.5, turnRadius * 1.35);
+      const arcPoints: Position3D[] = [];
+      const numArcSteps = 10;
+      
+      for (let s = 1; s <= numArcSteps; s++) {
+        const phi = (s / numArcSteps) * Math.PI; // 0 to PI
+        const along = -Math.cos(phi);
+        const across = Math.sin(phi);
+        const forwardOffset = (along < 0)
+          ? -turnRadius * (-along)
+          : (turnRadius * 0.45) * (1 - along * along);
+        const lateralOffset = across * bulbWidth;
+        arcPoints.push({
+          x: Number((pCurr.x + u1x * forwardOffset + n1x * lateralOffset).toFixed(2)),
+          y: pCurr.y || 0,
+          z: Number((pCurr.z + u1z * forwardOffset + n1z * lateralOffset).toFixed(2)),
+        });
+      }
+
+      fillets[i] = {
+        entry: {
+          x: Number((pCurr.x - u1x * turnRadius).toFixed(2)),
+          y: pCurr.y || 0,
+          z: Number((pCurr.z - u1z * turnRadius).toFixed(2)),
+        },
+        corner: pCurr,
+        exit: arcPoints[arcPoints.length - 1],
+        arcPoints,
+      };
+    } else {
+      const r = Math.min(maxCornerRadius, len1 * 0.38, len2 * 0.38);
+      fillets[i] = {
+        entry: {
+          x: Number((pCurr.x - u1x * r).toFixed(2)),
+          y: pCurr.y || 0,
+          z: Number((pCurr.z - u1z * r).toFixed(2)),
+        },
+        corner: pCurr,
+        exit: {
+          x: Number((pCurr.x + u2x * r).toFixed(2)),
+          y: pCurr.y || 0,
+          z: Number((pCurr.z + u2z * r).toFixed(2)),
+        },
+      };
+    }
+  }
+
+  const result: Position3D[] = [];
+  let currentStart = points[0];
+
+  for (let i = 1; i < points.length; i++) {
+    const fillet = fillets[i];
+    const targetPoint = fillet ? fillet.entry : points[i];
+
+    const segDist = Math.hypot(targetPoint.x - currentStart.x, targetPoint.z - currentStart.z);
+    const steps = Math.max(1, Math.ceil(segDist / stepSize));
+    for (let s = (result.length === 0 ? 0 : 1); s <= steps; s++) {
+      const t = s / steps;
+      result.push({
+        x: Number((currentStart.x + (targetPoint.x - currentStart.x) * t).toFixed(2)),
+        y: Number(((currentStart.y || 0) + ((targetPoint.y || 0) - (currentStart.y || 0)) * t).toFixed(2)),
+        z: Number((currentStart.z + (targetPoint.z - currentStart.z) * t).toFixed(2)),
+      });
+    }
+
+    if (fillet) {
+      if (fillet.arcPoints && fillet.arcPoints.length > 0) {
+        for (const pt of fillet.arcPoints) {
+          result.push(pt);
+        }
+      } else {
+        const filletLen = Math.hypot(fillet.exit.x - fillet.entry.x, fillet.exit.z - fillet.entry.z);
+        const fSteps = Math.max(3, Math.ceil(filletLen / (stepSize * 0.75)));
+        for (let s = 1; s <= fSteps; s++) {
+          const t = s / fSteps;
+          const omt = 1 - t;
+          const b0 = omt * omt;
+          const b1 = 2 * omt * t;
+          const b2 = t * t;
+          result.push({
+            x: Number((b0 * fillet.entry.x + b1 * fillet.corner.x + b2 * fillet.exit.x).toFixed(2)),
+            y: Number((b0 * (fillet.entry.y || 0) + b1 * (fillet.corner.y || 0) + b2 * (fillet.exit.y || 0)).toFixed(2)),
+            z: Number((b0 * fillet.entry.z + b1 * fillet.corner.z + b2 * fillet.exit.z).toFixed(2)),
+          });
+        }
+      }
+      currentStart = fillet.exit;
+    } else {
+      currentStart = points[i];
+    }
+  }
+
+  return result;
 }
 
 export function generateCurvedRouteFromNodeIds(
@@ -255,36 +410,7 @@ export function generateCurvedRouteFromNodeIds(
     const id = nodeIds[idx];
     const node = ROAD_NODES[id];
     if (!node) continue;
-
-    if (id === 'CENTRAL_ROUNDABOUT') {
-      const prevId = idx > 0 ? nodeIds[idx - 1] : null;
-      const nextId = idx < nodeIds.length - 1 ? nodeIds[idx + 1] : null;
-      const prevPt = prevId ? ROAD_NODES[prevId] : (startPos || null);
-      const nextPt = nextId ? ROAD_NODES[nextId] : (endPos || null);
-
-      if (prevPt && nextPt) {
-        const rbtRadius = 8.4;
-        const entryAngle = Math.atan2(prevPt.x, prevPt.z);
-        const exitAngle = Math.atan2(nextPt.x, nextPt.z);
-        let diff = exitAngle - entryAngle;
-        while (diff <= 0) diff += Math.PI * 2;
-
-        const arcSteps = Math.max(3, Math.min(6, Math.round((diff * rbtRadius) / 3.2)));
-        for (let s = 1; s <= arcSteps; s++) {
-          const u = s / (arcSteps + 1);
-          const curA = entryAngle + diff * u;
-          controlPoints.push({
-            x: Number((Math.sin(curA) * rbtRadius).toFixed(2)),
-            y: 0,
-            z: Number((Math.cos(curA) * rbtRadius).toFixed(2)),
-          });
-        }
-      } else {
-        controlPoints.push({ x: 0, y: 0, z: 8.4 });
-      }
-    } else {
-      controlPoints.push({ x: node.x, y: 0, z: node.z });
-    }
+    controlPoints.push({ x: node.x, y: 0, z: node.z });
   }
 
   if (endPos) {
@@ -301,35 +427,19 @@ export function generateCurvedRouteFromNodeIds(
 
   if (cleaned.length < 2) return cleaned;
 
-  const denseRoute: Position3D[] = [cleaned[0]];
-
-  for (let i = 0; i < cleaned.length - 1; i++) {
-    const p0 = cleaned[Math.max(0, i - 1)];
-    const p1 = cleaned[i];
-    const p2 = cleaned[i + 1];
-    const p3 = cleaned[Math.min(cleaned.length - 1, i + 2)];
-
-    const segDist = Math.hypot(p2.x - p1.x, p2.z - p1.z);
-    const samples = Math.max(3, Math.ceil(segDist / 1.2));
-
-    for (let s = 1; s <= samples; s++) {
-      const t = s / samples;
-      const pt = catmullRomPoint(p0, p1, p2, p3, t);
-      denseRoute.push(pt);
-    }
-  }
+  const denseRoute = buildFilletRoadPath(cleaned, 5.5, 1.2);
 
   if (!laneOffset || denseRoute.length < 2) return denseRoute;
 
   const isStartAtBay = Boolean(
-    startPos ||
     nodeIds[0]?.includes('BAY') ||
-    nodeIds[0]?.includes('ENTRANCE')
+    nodeIds[0]?.includes('ENTRANCE') ||
+    nodeIds[0]?.includes('WORKSHOP')
   );
   const isEndAtBay = Boolean(
-    endPos ||
     nodeIds[nodeIds.length - 1]?.includes('BAY') ||
-    nodeIds[nodeIds.length - 1]?.includes('ENTRANCE')
+    nodeIds[nodeIds.length - 1]?.includes('ENTRANCE') ||
+    nodeIds[nodeIds.length - 1]?.includes('WORKSHOP')
   );
 
   const lanedRoute: Position3D[] = [];
@@ -353,11 +463,34 @@ export function generateCurvedRouteFromNodeIds(
     }
 
     let blend = 1.0;
-    if (isStartAtBay && i < 6) {
-      blend = Math.min(blend, i / 5);
+    if (startPos && i < 8) {
+      blend = Math.min(blend, i / Math.min(7, Math.max(1, N - 1)));
+    } else if (isStartAtBay && i < 6) {
+      blend = Math.min(blend, i / Math.min(5, Math.max(1, N - 1)));
     }
-    if (isEndAtBay && i > N - 7) {
-      blend = Math.min(blend, (N - 1 - i) / 5);
+
+    if (endPos && i > N - 9) {
+      blend = Math.min(blend, (N - 1 - i) / Math.min(8, Math.max(1, N - 1)));
+    } else if (isEndAtBay && i > N - 7) {
+      blend = Math.min(blend, (N - 1 - i) / Math.min(5, Math.max(1, N - 1)));
+    }
+
+    if (i === 0 && startPos) {
+      lanedRoute.push({
+        x: Number(startPos.x.toFixed(2)),
+        y: startPos.y || curr.y || 0,
+        z: Number(startPos.z.toFixed(2)),
+      });
+      continue;
+    }
+
+    if (i === N - 1 && endPos) {
+      lanedRoute.push({
+        x: Number(endPos.x.toFixed(2)),
+        y: endPos.y || curr.y || 0,
+        z: Number(endPos.z.toFixed(2)),
+      });
+      continue;
     }
 
     const curOffset = laneOffset * blend;

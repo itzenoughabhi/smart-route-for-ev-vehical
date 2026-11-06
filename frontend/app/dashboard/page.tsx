@@ -9,7 +9,6 @@ import {
   Truck, 
   ArrowRight, 
   Layers, 
-  Grid2X2,
   Maximize2,
   ExternalLink,
   ChevronRight,
@@ -23,7 +22,7 @@ import { StationOwnerDashboard } from '../../components/dashboards/StationOwnerD
 import { RescueOperatorDashboard } from '../../components/dashboards/RescueOperatorDashboard';
 
 export default function DashboardPortalPage() {
-  const [activeTab, setActiveTab] = useState<'QUAD' | 'OWNER' | 'OEM' | 'STATION' | 'RESCUE'>('QUAD');
+  const [activeTab, setActiveTab] = useState<'QUAD' | 'OWNER' | 'OEM' | 'STATION' | 'RESCUE'>('OWNER');
 
   return (
     <div className="min-h-screen bg-[#070b13] text-slate-100 flex flex-col font-sans select-none">
@@ -48,17 +47,6 @@ export default function DashboardPortalPage() {
 
         {/* Tab View Selector matching the user's 4-panel image */}
         <div className="flex items-center bg-[#131d33] p-1 rounded-2xl border border-white/10 gap-1">
-          <button
-            onClick={() => setActiveTab('QUAD')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-              activeTab === 'QUAD'
-                ? 'bg-blue-600 text-white shadow-md shadow-blue-600/40'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Grid2X2 className="w-3.5 h-3.5" />
-            <span>4-in-1 Quad View</span>
-          </button>
 
           <button
             onClick={() => setActiveTab('OWNER')}

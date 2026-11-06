@@ -48,6 +48,7 @@ function StationPowerBox({ position }: { position: [number, number, number] }) {
 
 interface Props {
   station: Station;
+  isCabin?: boolean;
 }
 
 interface ChargerUnitProps {
@@ -175,12 +176,12 @@ const ModularChargerUnit = React.memo(function ModularChargerUnit({ charger, pos
   );
 });
 
-export const ChargingStation = React.memo(function ChargingStation({ station }: Props) {
+export const ChargingStation = React.memo(function ChargingStation({ station, isCabin }: Props) {
   const selectStation = useDigitalTwinStore((s) => s.selectStation);
   const selectedObject = useDigitalTwinStore((s) => s.selectedObject);
   const clearSelection = useDigitalTwinStore((s) => s.clearSelection);
 
-  const isSelected = selectedObject?.type === 'station' && selectedObject.id === station.id;
+  const isSelected = !isCabin && selectedObject?.type === 'station' && selectedObject.id === station.id;
 
   const availableCount = station.chargers.filter((c) => c.status === 'AVAILABLE').length;
   const faultCount = station.chargers.filter((c) => c.status === 'FAULT').length;
@@ -201,14 +202,17 @@ export const ChargingStation = React.memo(function ChargingStation({ station }: 
     <group
       position={[station.position.x, 0, station.position.z]}
       onClick={(e) => {
+        if (isCabin) return;
         e.stopPropagation();
         selectStation(station.id);
       }}
       onPointerOver={(e) => {
+        if (isCabin) return;
         e.stopPropagation();
         document.body.style.cursor = 'pointer';
       }}
       onPointerOut={() => {
+        if (isCabin) return;
         document.body.style.cursor = 'auto';
       }}
     >

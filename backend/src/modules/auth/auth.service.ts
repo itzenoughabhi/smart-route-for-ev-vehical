@@ -42,7 +42,7 @@ export class AuthService {
         name: 'Vikram Patel',
         role: 'STATION_OWNER',
         organization: 'Patel Fuels & EV Charging Stations LLP',
-        assignedStationIds: ['st-a102', 'st-b104', 'st-d305'],
+        assignedStationIds: ['st-a102', 'st-b104', 'st-c201', 'st-d305', 'st-p401', 'st-s801', 'st-m501', 'st-t601', 'st-d701'],
         createdAt: new Date().toISOString(),
       },
       {

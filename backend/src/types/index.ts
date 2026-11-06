@@ -49,6 +49,7 @@ export type TrafficState =
   | 'WAITING_INTERSECTION'
   | 'TURNING'
   | 'FOLLOWING'
+  | 'OVERTAKING'
   | 'STOPPED'
   | 'QUEUING'
   | 'ENTERING_STATION'
@@ -134,6 +135,7 @@ export interface Vehicle {
   estimatedRangeKm: number;
   status: VehicleStatus;
   trafficState?: TrafficState;
+  driveMode?: 'ECO' | 'CITY' | 'SPORT';
   speed: number;
   position: Position3D;
   heading: number;

@@ -31,11 +31,11 @@ export function StakeholderModal() {
 
   if (!isStakeholderModalOpen || !activeStakeholderDashboard) return null;
 
-  const roles: Array<{ role: UserRole; label: string; icon: any; color: string }> = [
-    { role: 'EV_OWNER', label: 'EV Owner', icon: Car, color: 'text-blue-600 bg-blue-50' },
-    { role: 'EV_MANUFACTURER', label: 'OEM Analytics', icon: Building2, color: 'text-indigo-600 bg-indigo-50' },
-    { role: 'STATION_OWNER', label: 'Station Operator', icon: Fuel, color: 'text-emerald-600 bg-emerald-50' },
-    { role: 'RESCUE_OPERATOR', label: 'Rescue & Tow', icon: Truck, color: 'text-amber-600 bg-amber-50' },
+  const roles: Array<{ role: UserRole; label: string; icon: any; color: string; tag: string }> = [
+    { role: 'EV_OWNER', label: 'EV Owner', icon: Car, color: 'text-blue-600 bg-blue-50', tag: '3D Drive' },
+    { role: 'EV_MANUFACTURER', label: 'OEM Analytics', icon: Building2, color: 'text-indigo-600 bg-indigo-50', tag: 'Telemetry' },
+    { role: 'STATION_OWNER', label: 'Station Operator', icon: Fuel, color: 'text-emerald-600 bg-emerald-50', tag: 'P&L' },
+    { role: 'RESCUE_OPERATOR', label: 'Rescue & Tow', icon: Truck, color: 'text-amber-600 bg-amber-50', tag: 'Dispatch' },
   ];
 
   const handleRoleChange = async (role: UserRole) => {
@@ -83,7 +83,7 @@ export function StakeholderModal() {
           </div>
 
           {/* Role Navigation Pills */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200/80">
+          <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200/80 gap-0.5">
             {roles.map((r) => {
               const Icon = r.icon;
               const isActive = activeStakeholderDashboard === r.role;
@@ -91,14 +91,19 @@ export function StakeholderModal() {
                 <button
                   key={r.role}
                   onClick={() => handleRoleChange(r.role)}
-                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     isActive
-                      ? 'bg-white text-slate-900 shadow-sm'
+                      ? 'bg-white text-slate-900 shadow-xs ring-1 ring-slate-200/60'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
                   }`}
                 >
                   <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
                   <span className="hidden sm:inline">{r.label}</span>
+                  <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded hidden lg:inline ${
+                    isActive ? 'bg-blue-50 text-blue-700' : 'text-slate-400'
+                  }`}>
+                    {r.tag}
+                  </span>
                 </button>
               );
             })}

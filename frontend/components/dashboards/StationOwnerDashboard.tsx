@@ -52,7 +52,7 @@ export function StationOwnerDashboard({ embedded = false }: StationOwnerDashboar
   const [searchEvQuery, setSearchEvQuery] = useState('');
   const [investedCandidate, setInvestedCandidate] = useState<string | null>(null);
 
-  // Owner Stations Portfolio
+  // Owner Stations Portfolio (All 9 Palghar & Boisar Regional Hubs)
   const ownerStations = [
     {
       code: 'A102',
@@ -69,9 +69,9 @@ export function StationOwnerDashboard({ embedded = false }: StationOwnerDashboar
     },
     {
       code: 'B104',
-      name: 'Palghar Highway Hub',
-      corridor: 'SH-40 Expressway Transit Corridor',
-      bays: 6,
+      name: 'Navapur Road Hub',
+      corridor: 'West Industrial Corridor',
+      bays: 4,
       power: '200kW DC',
       revenue: '₹11,40,000',
       profit: '₹7,25,000',
@@ -81,9 +81,22 @@ export function StationOwnerDashboard({ embedded = false }: StationOwnerDashboar
       status: 'Online',
     },
     {
+      code: 'C201',
+      name: 'MIDC Industrial Hub',
+      corridor: 'Tarapur Heavy Chemical Zone',
+      bays: 4,
+      power: '250kW DC',
+      revenue: '₹10,50,000',
+      profit: '₹6,80,000',
+      towingRevenue: '₹48,000',
+      totalTows: 35,
+      utilization: '82%',
+      status: 'Online',
+    },
+    {
       code: 'D305',
-      name: 'Tarapur Industrial Gateway',
-      corridor: 'MIDC Heavy Transport Corridor',
+      name: 'Boisar–Palghar Corridor',
+      corridor: 'South Highway Interchange',
       bays: 4,
       power: '250kW DC',
       revenue: '₹9,80,000',
@@ -91,6 +104,71 @@ export function StationOwnerDashboard({ embedded = false }: StationOwnerDashboar
       towingRevenue: '₹36,000',
       totalTows: 24,
       utilization: '72%',
+      status: 'Online',
+    },
+    {
+      code: 'P401',
+      name: 'Palghar District Central Hub',
+      corridor: 'Palghar Collectorate & Railway Junction',
+      bays: 6,
+      power: '350kW DC',
+      revenue: '₹14,20,000',
+      profit: '₹9,10,000',
+      towingRevenue: '₹72,500',
+      totalTows: 58,
+      utilization: '88%',
+      status: 'Online',
+    },
+    {
+      code: 'S801',
+      name: 'Shirgaon Beach & Fort Hub',
+      corridor: 'Shirgaon Historic Coast & Ocean Promenade',
+      bays: 4,
+      power: '150kW DC',
+      revenue: '₹6,90,000',
+      profit: '₹4,15,000',
+      towingRevenue: '₹28,000',
+      totalTows: 19,
+      utilization: '65%',
+      status: 'Online',
+    },
+    {
+      code: 'M501',
+      name: 'Manor NH-48 Express Hub',
+      corridor: 'Mumbai-Ahmedabad Expressway Corridor',
+      bays: 6,
+      power: '350kW DC',
+      revenue: '₹16,80,000',
+      profit: '₹11,40,000',
+      towingRevenue: '₹88,200',
+      totalTows: 64,
+      utilization: '92%',
+      status: 'Online',
+    },
+    {
+      code: 'T601',
+      name: 'Tarapur Coastal Energy Hub',
+      corridor: 'Tarapur Atomic Zone & Chinchani Coast',
+      bays: 4,
+      power: '200kW DC',
+      revenue: '₹7,80,000',
+      profit: '₹4,90,000',
+      towingRevenue: '₹32,000',
+      totalTows: 22,
+      utilization: '69%',
+      status: 'Online',
+    },
+    {
+      code: 'D701',
+      name: 'Dahanu Highway Hub',
+      corridor: 'North Palghar Coastal Gateway',
+      bays: 4,
+      power: '180kW DC',
+      revenue: '₹8,60,000',
+      profit: '₹5,40,000',
+      towingRevenue: '₹39,500',
+      totalTows: 27,
+      utilization: '74%',
       status: 'Online',
     },
   ];
@@ -290,6 +368,209 @@ export function StationOwnerDashboard({ embedded = false }: StationOwnerDashboar
         },
       ],
     },
+    C201: {
+      towVans: [
+        {
+          code: 'Tow-06',
+          model: 'Industrial Flatbed EV Hauler',
+          driverName: 'Sunil Gupta',
+          phone: '+91 98230 44106',
+          status: 'AVAILABLE',
+          totalTowedCount: 35,
+          monthlyTows: 16,
+          todayTows: 2,
+          totalRevenueEarned: 48000,
+        },
+      ],
+      towedHistory: [
+        {
+          id: 'RESC-4011',
+          timestamp: 'Yesterday, 06:14 PM',
+          evCode: 'EV-210',
+          evModel: 'Tata Tiago EV',
+          towVanCode: 'Tow-06',
+          driverName: 'Sunil Gupta',
+          reason: 'High Voltage Fuse Overload in Industrial Lane',
+          pickupLocation: 'MIDC Boisar Phase 2',
+          distanceKm: 4.2,
+          towingFee: 1400,
+          status: 'COMPLETED',
+        },
+      ],
+    },
+    P401: {
+      towVans: [
+        {
+          code: 'Tow-07',
+          model: 'Palghar Rapid Municipal Tow',
+          driverName: 'Amit Deshmukh',
+          phone: '+91 98230 44107',
+          status: 'AVAILABLE',
+          totalTowedCount: 38,
+          monthlyTows: 19,
+          todayTows: 3,
+          totalRevenueEarned: 46200,
+        },
+        {
+          code: 'Tow-08',
+          model: 'Heavy Duty District Flatbed',
+          driverName: 'Prakash Shinde',
+          phone: '+91 98230 44108',
+          status: 'ON_JOB',
+          totalTowedCount: 20,
+          monthlyTows: 11,
+          todayTows: 1,
+          totalRevenueEarned: 26300,
+          currentMission: { targetEv: 'EV-078', etaMinutes: 6, destination: 'Palghar Central Bay #4' },
+        },
+      ],
+      towedHistory: [
+        {
+          id: 'RESC-5012',
+          timestamp: 'Today, 02:40 AM',
+          evCode: 'EV-078',
+          evModel: 'BYD Atto 3',
+          towVanCode: 'Tow-08',
+          driverName: 'Prakash Shinde',
+          reason: 'Collectorate Junction Traffic Stall (0% Battery)',
+          pickupLocation: 'Palghar Court Circle',
+          distanceKm: 3.1,
+          towingFee: 1500,
+          status: 'IN_TRANSIT',
+        },
+      ],
+    },
+    S801: {
+      towVans: [
+        {
+          code: 'Tow-09',
+          model: 'Coastal Beach Patrol Tow',
+          driverName: 'Tanaji More',
+          phone: '+91 98230 44109',
+          status: 'AVAILABLE',
+          totalTowedCount: 19,
+          monthlyTows: 9,
+          todayTows: 1,
+          totalRevenueEarned: 28000,
+        },
+      ],
+      towedHistory: [
+        {
+          id: 'RESC-6015',
+          timestamp: '11 Oct, 05:30 PM',
+          evCode: 'EV-112',
+          evModel: 'MG ZS EV',
+          towVanCode: 'Tow-09',
+          driverName: 'Tanaji More',
+          reason: 'Sand Track Stuck & Battery Depletion',
+          pickupLocation: 'Shirgaon Beach Road',
+          distanceKm: 2.9,
+          towingFee: 1600,
+          status: 'COMPLETED',
+        },
+      ],
+    },
+    M501: {
+      towVans: [
+        {
+          code: 'Tow-10',
+          model: 'NH-48 Expressway Rapid Rescue',
+          driverName: 'Balwant Singh',
+          phone: '+91 98230 44110',
+          status: 'AVAILABLE',
+          totalTowedCount: 42,
+          monthlyTows: 22,
+          todayTows: 3,
+          totalRevenueEarned: 58000,
+        },
+        {
+          code: 'Tow-11',
+          model: 'High-Speed Highway Recovery',
+          driverName: 'Sandeep Rawat',
+          phone: '+91 98230 44111',
+          status: 'AVAILABLE',
+          totalTowedCount: 22,
+          monthlyTows: 12,
+          todayTows: 1,
+          totalRevenueEarned: 30200,
+        },
+      ],
+      towedHistory: [
+        {
+          id: 'RESC-7019',
+          timestamp: 'Yesterday, 11:20 PM',
+          evCode: 'EV-290',
+          evModel: 'Hyundai Ioniq 5',
+          towVanCode: 'Tow-10',
+          driverName: 'Balwant Singh',
+          reason: 'High-Speed BMS Cutoff on Flyover',
+          pickupLocation: 'Manor Toll Plaza km 84',
+          distanceKm: 8.4,
+          towingFee: 2200,
+          status: 'COMPLETED',
+        },
+      ],
+    },
+    T601: {
+      towVans: [
+        {
+          code: 'Tow-12',
+          model: 'Atomic Coastal Special Tow',
+          driverName: 'Nitin Kadam',
+          phone: '+91 98230 44112',
+          status: 'AVAILABLE',
+          totalTowedCount: 22,
+          monthlyTows: 10,
+          todayTows: 1,
+          totalRevenueEarned: 32000,
+        },
+      ],
+      towedHistory: [
+        {
+          id: 'RESC-8022',
+          timestamp: '10 Oct, 03:15 PM',
+          evCode: 'EV-095',
+          evModel: 'Tata Nexon EV Max',
+          towVanCode: 'Tow-12',
+          driverName: 'Nitin Kadam',
+          reason: 'Inverter Overheat in Coastal Traffic',
+          pickupLocation: 'Tarapur Atomic Plant Road',
+          distanceKm: 4.8,
+          towingFee: 1400,
+          status: 'COMPLETED',
+        },
+      ],
+    },
+    D701: {
+      towVans: [
+        {
+          code: 'Tow-13',
+          model: 'North Highway Heavy Winch Van',
+          driverName: 'Hemant Vaze',
+          phone: '+91 98230 44113',
+          status: 'AVAILABLE',
+          totalTowedCount: 27,
+          monthlyTows: 14,
+          todayTows: 2,
+          totalRevenueEarned: 39500,
+        },
+      ],
+      towedHistory: [
+        {
+          id: 'RESC-9031',
+          timestamp: '13 Oct, 08:45 AM',
+          evCode: 'EV-155',
+          evModel: 'Commercial Logistics EV',
+          towVanCode: 'Tow-13',
+          driverName: 'Hemant Vaze',
+          reason: 'Overloaded Incline Battery Stall',
+          pickupLocation: 'Dahanu Coastal Flyover',
+          distanceKm: 6.2,
+          towingFee: 1800,
+          status: 'COMPLETED',
+        },
+      ],
+    },
   };
 
   const currentTowing = stationTowingData[selectedStationCode] || stationTowingData['A102'];
@@ -390,7 +671,7 @@ export function StationOwnerDashboard({ embedded = false }: StationOwnerDashboar
               <span>Vikram Patel (Owner)</span>
             </div>
             <p className="text-[10px] text-slate-400 leading-tight">
-              3 Stations Owned · {ownerStations.reduce((a, b) => a + b.bays, 0)} Total Bays · {Object.values(stationTowingData).reduce((a, b) => a + b.towVans.length, 0)} Tow Vans
+              {ownerStations.length} Regional Stations Portfolio · {ownerStations.reduce((a, b) => a + b.bays, 0)} Total Bays · {Object.values(stationTowingData).reduce((a, b) => a + b.towVans.length, 0)} Tow Vans
             </p>
           </div>
         </div>
@@ -1053,9 +1334,9 @@ export function StationOwnerDashboard({ embedded = false }: StationOwnerDashboar
           )}
 
           {/* ========================================================
-              VIEW 3: LIVE OPERATIONS (Bays & Real-time load)
+              VIEW 3: LIVE OPERATIONS & CHARGERS (Bays & Real-time load)
              ======================================================== */}
-          {activeMenu === 'Live' && (
+          {(activeMenu === 'Live' || activeMenu === 'Chargers') && (
             <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
               <h3 className="text-base font-black text-slate-900">
                 {currentStation.name} — Real-Time Bay Status

@@ -4,6 +4,7 @@ import { eventService } from '../events/event.service';
 import {
   findShortestPath,
   findNearestNodeId,
+  findForwardNodeId,
   generateCurvedRouteFromNodeIds,
   generateRandomRoute,
   getStationNodeId,
@@ -100,6 +101,111 @@ export class VehicleService {
     return generateCurvedRouteFromNodeIds(corridor.nodes);
   }
 
+  public static getNextContinuousRoute(
+    currentPos: Position3D,
+    currentCorridorId?: string,
+    currentHeading?: number
+  ): { corridorId: string; corridorName: string; route: Position3D[] } {
+    const activeCorridorId = currentCorridorId && REGIONAL_CORRIDORS[currentCorridorId]
+      ? currentCorridorId
+      : VehicleService.getNearestCorridorId(currentPos);
+    
+    const activeCorridor = REGIONAL_CORRIDORS[activeCorridorId] || REGIONAL_CORRIDORS.palghar_sh40;
+    const corridorNodes = activeCorridor.nodes;
+
+    const hasHeading = currentHeading !== undefined && !isNaN(currentHeading);
+    const fX = hasHeading ? Math.sin(currentHeading!) : 0;
+    const fZ = hasHeading ? Math.cos(currentHeading!) : 0;
+
+    let bestIdx = 0;
+    let bestScore = Infinity;
+    let bestTProj = 0;
+
+    // Directional corridor matching: test each candidate segment along activeCorridor
+    for (let i = 0; i < corridorNodes.length; i++) {
+      const nodeAId = corridorNodes[i];
+      const nodeA = ROAD_NODES[nodeAId];
+      if (!nodeA) continue;
+
+      const nextNodeId = corridorNodes[(i + 1) % corridorNodes.length];
+      const nextNode = ROAD_NODES[nextNodeId];
+      if (!nextNode) continue;
+
+      const segDx = nextNode.x - nodeA.x;
+      const segDz = nextNode.z - nodeA.z;
+      const segLen = Math.hypot(segDx, segDz);
+      if (segLen < 0.1) continue;
+
+      const uSegX = segDx / segLen;
+      const uSegZ = segDz / segLen;
+
+      // Projection of vehicle currentPos relative to segment nodeA
+      const vx = currentPos.x - nodeA.x;
+      const vz = currentPos.z - nodeA.z;
+      const tProj = vx * uSegX + vz * uSegZ;
+
+      // Closest point on the segment
+      const tClamped = Math.max(0, Math.min(segLen, tProj));
+      const closeX = nodeA.x + uSegX * tClamped;
+      const closeZ = nodeA.z + uSegZ * tClamped;
+      const perpDist = Math.hypot(currentPos.x - closeX, currentPos.z - closeZ);
+
+      let dirAlignment = 1.0;
+      if (hasHeading) {
+        dirAlignment = uSegX * fX + uSegZ * fZ;
+      }
+
+      let score = perpDist;
+      if (dirAlignment < -0.2) {
+        score += 400; // heavily penalize backward corridor flow (e.g. Southbound when going North)
+      } else {
+        score -= dirAlignment * 30; // reward forward alignment
+      }
+
+      // Penalize segments that are far behind or excessively ahead of currentPos
+      if (tProj < -15.0) score += 200;
+      if (tProj > segLen + 25.0) score += 200;
+
+      if (score < bestScore) {
+        bestScore = score;
+        bestIdx = i;
+        bestTProj = tProj;
+      }
+    }
+
+    // Determine upcoming node start index:
+    // If vehicle has already passed nodeA along the chosen segment, start with nextNode!
+    // Never force the vehicle backwards to visit a node it has already driven past!
+    const startNodeIdx = bestTProj >= 1.5
+      ? (bestIdx + 1) % corridorNodes.length
+      : bestIdx;
+
+    const sequence: string[] = [];
+    for (let i = 0; i < corridorNodes.length; i++) {
+      sequence.push(corridorNodes[(startNodeIdx + i) % corridorNodes.length]);
+    }
+    sequence.push(corridorNodes[startNodeIdx]);
+
+    // Clean duplicate consecutive nodes
+    const cleanSeq: string[] = [];
+    for (const n of sequence) {
+      if (cleanSeq.length === 0 || cleanSeq[cleanSeq.length - 1] !== n) {
+        cleanSeq.push(n);
+      }
+    }
+
+    const curved = generateCurvedRouteFromNodeIds(cleanSeq, currentPos);
+    const targetNode = ROAD_NODES[corridorNodes[startNodeIdx]];
+    const targetPos: Position3D = targetNode ? { x: targetNode.x, y: 0.1, z: targetNode.z } : currentPos;
+    const finalRoute = curved.length > 2 ? curved : [currentPos, targetPos];
+
+    return {
+      corridorId: activeCorridorId,
+      corridorName: activeCorridor.name,
+      route: finalRoute,
+    };
+  }
+
   public static getNearestCorridorId(pos: Position3D): string {
     const nearestNode = findNearestNodeId(pos);
     for (const [id, corridor] of Object.entries(REGIONAL_CORRIDORS)) {
@@ -110,11 +216,11 @@ export class VehicleService {
     return 'palghar_sh40';
   }
 
-  public static getRouteForStation(stationCode: string, fromPos?: Position3D): Position3D[] {
+  public static getRouteForStation(stationCode: string, fromPos?: Position3D, currentHeading?: number): Position3D[] {
     const endNodeId = getStationNodeId(stationCode);
     let startNodeId = 'CENTRAL_ROUNDABOUT';
     if (fromPos) {
-      startNodeId = findNearestNodeId(fromPos, false);
+      startNodeId = findForwardNodeId(fromPos, currentHeading);
     } else {
       switch (stationCode) {
         case 'A102': startNodeId = 'BOISAR_EAST'; break;
@@ -133,15 +239,15 @@ export class VehicleService {
     return generateCurvedRouteFromNodeIds(path, fromPos);
   }
 
-  public static getRouteForServiceCenter(fromPos?: Position3D): Position3D[] {
+  public static getRouteForServiceCenter(fromPos?: Position3D, currentHeading?: number): Position3D[] {
     const endNodeId = 'S03_WORKSHOP_BAYS';
-    const startNodeId = fromPos ? findNearestNodeId(fromPos, false) : 'CENTRAL_ROUNDABOUT';
+    const startNodeId = fromPos ? findForwardNodeId(fromPos, currentHeading) : 'CENTRAL_ROUNDABOUT';
     const path = findShortestPath(startNodeId, endNodeId);
     return generateCurvedRouteFromNodeIds(path, fromPos);
   }
 
-  public static getRouteFromCurrentPositionTo(fromPos: Position3D, toPos: Position3D): Position3D[] {
-    const startNodeId = findNearestNodeId(fromPos, false);
+  public static getRouteFromCurrentPositionTo(fromPos: Position3D, toPos: Position3D, currentHeading?: number): Position3D[] {
+    const startNodeId = findForwardNodeId(fromPos, currentHeading);
     const endNodeId = findNearestNodeId(toPos, false);
     const path = findShortestPath(startNodeId, endNodeId);
     return generateCurvedRouteFromNodeIds(path, fromPos, toPos);
@@ -154,7 +260,8 @@ export class VehicleService {
   public static getDepartureRouteForCorridor(
     stationCode: string,
     corridorId: string,
-    vehiclePos: Position3D
+    vehiclePos: Position3D,
+    preferredHeading?: number
   ): Position3D[] {
     const bayId = getStationNodeId(stationCode);
     const entranceId = ROAD_NODES[bayId]?.neighbors[0] || 'A102_ENTRANCE';
@@ -163,18 +270,52 @@ export class VehicleService {
     const corridor = REGIONAL_CORRIDORS[corridorId] || REGIONAL_CORRIDORS.boisar_town;
     const corridorNodes = corridor.nodes;
 
-    // Build the departure node sequence:
-    // 1. Station bay & apron entrance
-    // 2. Highway merge junction node (the exact road the station is on)
-    // 3. Subsequent nodes along the vehicle's original corridor
+    // Find ALL occurrences of highwayNodeId in corridorNodes (e.g. D305_JUNCTION appears in both directions)
+    const matchingIndices: number[] = [];
+    for (let i = 0; i < corridorNodes.length; i++) {
+      if (corridorNodes[i] === highwayNodeId) {
+        matchingIndices.push(i);
+      }
+    }
+
+    let resumeNodeIndex = -1;
+
+    if (matchingIndices.length > 0) {
+      if (matchingIndices.length === 1 || preferredHeading === undefined || isNaN(preferredHeading)) {
+        resumeNodeIndex = matchingIndices[0];
+      } else {
+        // Directional corridor matching: choose the occurrence whose outgoing segment aligns with preferredHeading
+        const fX = Math.sin(preferredHeading);
+        const fZ = Math.cos(preferredHeading);
+        let bestAlign = -Infinity;
+        let bestMatch = matchingIndices[0];
+
+        const hwNode = ROAD_NODES[highwayNodeId];
+        for (const idx of matchingIndices) {
+          const nextNode = ROAD_NODES[corridorNodes[(idx + 1) % corridorNodes.length]];
+          if (hwNode && nextNode) {
+            const dx = nextNode.x - hwNode.x;
+            const dz = nextNode.z - hwNode.z;
+            const len = Math.hypot(dx, dz);
+            if (len > 0.1) {
+              const align = (dx * fX + dz * fZ) / len;
+              if (align > bestAlign) {
+                bestAlign = align;
+                bestMatch = idx;
+              }
+            }
+          }
+        }
+        resumeNodeIndex = bestMatch;
+      }
+    }
+
     const sequence: string[] = [bayId, entranceId, highwayNodeId];
-    const resumeNodeIndex = corridorNodes.indexOf(highwayNodeId);
 
     if (resumeNodeIndex !== -1) {
       for (let i = 1; i <= corridorNodes.length; i++) {
         const nextNode = corridorNodes[(resumeNodeIndex + i) % corridorNodes.length];
         sequence.push(nextNode);
-        if (sequence.length > 8) break;
       }
     } else {
       let closestCorridorNode = corridorNodes[0];
@@ -194,9 +335,37 @@ export class VehicleService {
       for (const n of transitionPath.slice(1)) {
         sequence.push(n);
       }
-      const cIdx = corridorNodes.indexOf(closestCorridorNode);
+
+      // Check all occurrences of closestCorridorNode with directional matching
+      const cIndices: number[] = [];
+      for (let i = 0; i < corridorNodes.length; i++) {
+        if (corridorNodes[i] === closestCorridorNode) cIndices.push(i);
+      }
+      let cIdx = cIndices[0] ?? -1;
+      if (cIndices.length > 1 && preferredHeading !== undefined && !isNaN(preferredHeading)) {
+        const fX = Math.sin(preferredHeading);
+        const fZ = Math.cos(preferredHeading);
+        let bestAlign = -Infinity;
+        const cNode = ROAD_NODES[closestCorridorNode];
+        for (const idx of cIndices) {
+          const nextNode = ROAD_NODES[corridorNodes[(idx + 1) % corridorNodes.length]];
+          if (cNode && nextNode) {
+            const dx = nextNode.x - cNode.x;
+            const dz = nextNode.z - cNode.z;
+            const len = Math.hypot(dx, dz);
+            if (len > 0.1) {
+              const align = (dx * fX + dz * fZ) / len;
+              if (align > bestAlign) {
+                bestAlign = align;
+                cIdx = idx;
+              }
+            }
+          }
+        }
+      }
+
       if (cIdx !== -1) {
-        for (let i = 1; i <= 6; i++) {
+        for (let i = 1; i <= corridorNodes.length; i++) {
           sequence.push(corridorNodes[(cIdx + i) % corridorNodes.length]);
         }
       }
@@ -506,7 +675,7 @@ export class VehicleService {
 
     const newRoute = customWaypoints && customWaypoints.length > 1
       ? customWaypoints
-      : VehicleService.getRouteFromCurrentPositionTo(vehicle.position, newStation.position);
+      : VehicleService.getRouteFromCurrentPositionTo(vehicle.position, newStation.position, vehicle.heading);
 
     vehicle.destinationStationId = newStation.id;
     vehicle.serviceCenterId = null;
@@ -538,7 +707,7 @@ export class VehicleService {
     if (!vehicle) return false;
 
     const sc = stationService.getServiceCenter();
-    const serviceRoute = VehicleService.getRouteFromCurrentPositionTo(vehicle.position, sc.position);
+    const serviceRoute = VehicleService.getRouteFromCurrentPositionTo(vehicle.position, sc.position, vehicle.heading);
 
     stationService.releaseChargerByVehicle(vehicle.id);
 

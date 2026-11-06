@@ -95,10 +95,11 @@ export class WebSocketGateway {
         this.io.emit('service:update', stationService.getServiceCenter());
       });
 
-      socket.on('vehicle:update', (payload?: { id: string; speed?: number; status?: any; position?: { x: number; y: number; z: number }; heading?: number; batteryPct?: number; estimatedRangeKm?: number }) => {
+      socket.on('vehicle:update', (payload?: { id: string; speed?: number; status?: any; position?: { x: number; y: number; z: number }; heading?: number; batteryPct?: number; estimatedRangeKm?: number; driveMode?: 'ECO' | 'CITY' | 'SPORT' }) => {
         if (!payload?.id) return;
         const v = vehicleService.getVehicleById(payload.id);
         if (v) {
+          if (payload.driveMode) v.driveMode = payload.driveMode;
           if (typeof payload.speed === 'number') v.speed = payload.speed;
           if (typeof payload.heading === 'number') v.heading = payload.heading;
           if (payload.position && typeof payload.position.x === 'number' && typeof payload.position.z === 'number') {
@@ -116,7 +117,7 @@ export class WebSocketGateway {
               if (typeof payload.speed === 'number' && payload.speed > 0) {
                 v.speed = payload.speed;
               } else if (v.speed <= 0) {
-                v.speed = 42;
+                v.speed = v.driveMode === 'SPORT' ? 95 : v.driveMode === 'CITY' ? 60 : 42;
               }
               if (v.assignedChargerId) {
                 stationService.releaseChargerByVehicle(v.id);
@@ -131,7 +132,7 @@ export class WebSocketGateway {
               }
               if (!v.routeWaypoints || v.routeWaypoints.length < 2) {
                 const target = stationService.getAllStations()[0];
-                v.routeWaypoints = VehicleService.getRouteForStation(target.code, v.position);
+                v.routeWaypoints = VehicleService.getRouteForStation(target.code, v.position, v.heading);
                 v.currentWaypointIndex = 0;
               }
             } else if (payload.status === 'PAUSED') {

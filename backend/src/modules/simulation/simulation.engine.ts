@@ -23,6 +23,13 @@ export class SimulationEngine {
   private tickCount: number = 0;
   private onTickCallbacks: ((data: any) => void)[] = [];
   private vehicleStationaryTicks: Map<string, number> = new Map();
+  private vehicleWaypointProgressTicks: Map<string, { index: number; ticks: number }> = new Map();
+  private vehicleOvertakeStates: Map<string, {
+    targetVehicleId: string;
+    phase: 'PULL_OUT' | 'PASSING' | 'MERGE_BACK';
+    lateralOffset: number;
+    ticksInPhase: number;
+  }> = new Map();
 
   public static readonly TICK_INTERVAL_MS = 100;
   public static readonly DT = 0.1;
@@ -226,18 +233,61 @@ export class SimulationEngine {
 
         while (vehicle.currentWaypointIndex < waypoints.length - 1) {
           const wp = waypoints[vehicle.currentWaypointIndex];
+          const nextWp = waypoints[vehicle.currentWaypointIndex + 1];
           const wdx = wp.x - vehicle.position.x;
           const wdz = wp.z - vehicle.position.z;
           const wdist = Math.hypot(wdx, wdz);
           const fX = Math.sin(vehicle.heading || 0);
           const fZ = Math.cos(vehicle.heading || 0);
-          const dot = wdx * fX + wdz * fZ;
+          const dot = wdx * fX + wdz * fZ; // positive = waypoint is ahead, negative = waypoint is behind
 
-          if (wdist < 1.3 || (dot < 0.05 && wdist < 2.2)) {
+          const nextDx = nextWp.x - vehicle.position.x;
+          const nextDz = nextWp.z - vehicle.position.z;
+          const nextDist = Math.hypot(nextDx, nextDz);
+          const nextDot = nextDx * fX + nextDz * fZ;
+
+          const segX = nextWp.x - wp.x;
+          const segZ = nextWp.z - wp.z;
+          const segLenSq = segX * segX + segZ * segZ;
+          let projT = 0;
+          if (segLenSq > 0.01) {
+            projT = ((vehicle.position.x - wp.x) * segX + (vehicle.position.z - wp.z) * segZ) / segLenSq;
+          }
+
+          // Advance if:
+          // 1. Within arrival radius of waypoint
+          // 2. Waypoint is behind vehicle's heading (dot < -0.1)
+          // 3. Vehicle has progressed past wp along the segment (projT > 0.70)
+          // 4. Next waypoint is closer than current waypoint AND next waypoint is not behind vehicle
+          if (
+            wdist < 2.2 ||
+            dot < -0.1 ||
+            projT > 0.70 ||
+            (nextDist < wdist && nextDot > -0.6)
+          ) {
             vehicle.currentWaypointIndex++;
           } else {
             break;
           }
+        }
+
+        // Proactive forward scan: If vehicle has overshot or drifted, advance to closest forward waypoint
+        let bestAheadIdx = vehicle.currentWaypointIndex;
+        let bestAheadDist = Math.hypot(waypoints[vehicle.currentWaypointIndex].x - vehicle.position.x, waypoints[vehicle.currentWaypointIndex].z - vehicle.position.z);
+        const maxScan = Math.min(waypoints.length - 1, vehicle.currentWaypointIndex + 8);
+        for (let sIdx = vehicle.currentWaypointIndex + 1; sIdx <= maxScan; sIdx++) {
+          const sWp = waypoints[sIdx];
+          const sDx = sWp.x - vehicle.position.x;
+          const sDz = sWp.z - vehicle.position.z;
+          const sDist = Math.hypot(sDx, sDz);
+          const sDot = sDx * Math.sin(vehicle.heading || 0) + sDz * Math.cos(vehicle.heading || 0);
+          if (sDist < bestAheadDist - 0.4 && sDot > -0.4) {
+            bestAheadDist = sDist;
+            bestAheadIdx = sIdx;
+          }
+        }
+        if (bestAheadIdx > vehicle.currentWaypointIndex) {
+          vehicle.currentWaypointIndex = bestAheadIdx;
         }
 
         const targetWp = waypoints[vehicle.currentWaypointIndex];
@@ -254,25 +304,36 @@ export class SimulationEngine {
         const dz = targetWp.z - vehicle.position.z;
         const dist = Math.hypot(dx, dz);
 
-        let effectiveSpeed = vehicle.speed > 10 ? vehicle.speed : Math.floor(36 + Math.random() * 8);
+        const baseTargetSpeed = vehicle.driveMode === 'SPORT'
+          ? 95
+          : vehicle.driveMode === 'CITY'
+          ? 60
+          : vehicle.driveMode === 'ECO'
+          ? 40
+          : (vehicle.speed > 10 ? vehicle.speed : Math.floor(36 + Math.random() * 8));
+
+        let effectiveSpeed = baseTargetSpeed;
 
         const allVehicles = vehicleService.getAllVehicles();
         const fX = Math.sin(vehicle.heading || 0);
         const fZ = Math.cos(vehicle.heading || 0);
 
-        const getVehicleRadius = (model: string) => {
-          if (model === 'Electric City Bus' || model === 'Heavy Electric Hauler') return 4.5;
-          if (model === 'Commercial EV Van' || model === 'Electric Pickup Truck') return 3.0;
-          return 2.0;
+        const getVehicleHalfLength = (model: string) => {
+          if (model === 'Electric City Bus' || model === 'Heavy Electric Hauler') return 4.8;
+          if (model === 'Commercial EV Van' || model === 'Electric Pickup Truck') return 3.2;
+          if (model === 'CyberSedan' || model === 'Tesla Model Y') return 2.6;
+          return 2.4;
         };
 
-        const myRadius = getVehicleRadius(vehicle.model);
+        const myHalfLength = getVehicleHalfLength(vehicle.model);
+        let hasObstacleAhead = false;
+
+        let overtakeState = this.vehicleOvertakeStates.get(vehicle.id);
 
         for (const other of allVehicles) {
           if (other.id === vehicle.id) continue;
 
-          // COMPLETELY IGNORE vehicles that are stranded, pulled over on the shoulder, or parked in bays/queues
-          // This ensures stranded 0% battery cars NEVER block road traffic!
+          // Ignore vehicles that are pulled over on the shoulder or docked inside charging bays
           if (
             other.status === 'STRANDED' ||
             (other as any)._isPulledOver ||
@@ -288,90 +349,259 @@ export class SimulationEngine {
           const toOtherZ = other.position.z - vehicle.position.z;
           const distToOther = Math.hypot(toOtherX, toOtherZ);
 
-          const otherRadius = getVehicleRadius(other.model);
-          const minStoppingGap = myRadius + otherRadius + 1.2;
-          const slowDownGap = minStoppingGap * 2.0;
+          const otherHalfLength = getVehicleHalfLength(other.model);
 
-          // 1. PHYSICAL ANTI-OVERLAP REPULSION (Gently pushes meshes apart so they never penetrate)
-          // 1. PHYSICAL ANTI-OVERLAP SPEED ADJUSTMENT (Gently modulates speed to maintain headway without pushing into divider)
-          if (distToOther < (myRadius + otherRadius)) {
-            effectiveSpeed = Math.max(12, effectiveSpeed * 0.45);
+          // Longitudinal distance along our heading vector (positive = ahead, negative = behind)
+          const longDist = fX * toOtherX + fZ * toOtherZ;
+          // Lateral distance perpendicular to our heading vector
+          const latDist = Math.abs(-fZ * toOtherX + fX * toOtherZ);
+
+          // Physical vehicle body half-widths are ~1.1m (total combined half-widths ~2.2m).
+          // On a divided or 2-lane road (separation ~4.3m), vehicles with latDist > 2.2m are in separate lanes!
+          const isInOurLane = latDist < 2.2;
+          const isOvertakingThisLead = Boolean(overtakeState && overtakeState.targetVehicleId === other.id);
+
+          // 1. HARD ANTI-OVERLAP: ONLY applies if vehicles are physically colliding
+          if (isInOurLane && Math.abs(longDist) < (myHalfLength + otherHalfLength + 0.4)) {
+            if (!isOvertakingThisLead || Math.abs(overtakeState?.lateralOffset || 0) < 1.4) {
+              effectiveSpeed = Math.min(effectiveSpeed, 12);
+              hasObstacleAhead = true;
+              if (longDist > 0 && longDist < (myHalfLength + otherHalfLength + 0.2)) {
+                effectiveSpeed = 0;
+              }
+              continue;
+            }
           }
 
-          if (distToOther < slowDownGap) {
-            const otherFx = Math.sin(other.heading || 0);
-            const otherFz = Math.cos(other.heading || 0);
-            const headingAlignment = fX * otherFx + fZ * otherFz;
+          const otherFx = Math.sin(other.heading || 0);
+          const otherFz = Math.cos(other.heading || 0);
+          const headingAlignment = fX * otherFx + fZ * otherFz;
 
-            // 2. SAME DIRECTION FOLLOWING (Adaptive Cruise Control)
-            if (headingAlignment > 0.3) {
-              const longDist = fX * toOtherX + fZ * toOtherZ;
-              const latDist = Math.abs(fX * toOtherZ - fZ * toOtherX);
+          // 2. SAME DIRECTION FOLLOWING & OVERTAKING OPPORTUNITY
+          if (headingAlignment > 0.35 && isInOurLane && longDist > 0.2) {
+            const minStoppingGap = myHalfLength + otherHalfLength + 2.5;
+            const slowDownGap = minStoppingGap + 15.0;
 
-              // Vehicle is in our lane ahead of us
-              if (latDist < 1.9 && longDist > 0.1) {
-                if (longDist < minStoppingGap) {
-                  // Wait at safe distance behind lead car
-                  effectiveSpeed = 0;
-                } else {
-                  // Decelerate smoothly to follow headway, maintaining minimum approach crawl
-                  const headwayRatio = Math.max(0, (longDist - minStoppingGap) / (slowDownGap - minStoppingGap));
-                  const leadSpeed = other.speed > 5 ? other.speed : 26;
-                  const targetFollowSpeed = Math.max(14, leadSpeed * headwayRatio);
-                  effectiveSpeed = Math.min(effectiveSpeed, targetFollowSpeed);
-                }
-              }
-            } else if (Math.abs(headingAlignment) <= 0.3) {
-              // 3. CROSSING AT INTERSECTION (Perpendicular Cross-Traffic Right-of-Way Yielding)
-              if (other.speed > 5) {
-                const myPrio = (vehicle.model === 'Highway Patrol EV' ? 10 : (vehicle.model === 'Electric City Bus' || vehicle.model === 'Heavy Electric Hauler') ? 8 : 1);
-                const otherPrio = (other.model === 'Highway Patrol EV' ? 10 : (other.model === 'Electric City Bus' || other.model === 'Heavy Electric Hauler') ? 8 : 1);
-                
-                const shouldYield = myPrio < otherPrio || (myPrio === otherPrio && vehicle.id > other.id);
+            // Check if our vehicle should initiate an OVERTAKE maneuver:
+            // Requirements:
+            // 1. Not already overtaking
+            // 2. Faster vehicle behind slower vehicle (e.g. car behind heavy truck or slower traffic)
+            // 3. Normal driving status, safe battery, not ECO mode
+            // 4. Road ahead is straight enough (headingDiff < 0.25)
+            // 5. CRITICAL: NO VEHICLE IS COMING FROM OPPOSITE DIRECTION on this road stretch within safe distance!
+            const canOvertakeType = vehicle.model !== 'Heavy Electric Hauler' && vehicle.model !== 'Electric City Bus';
+            const isLeadSlower = other.speed < (baseTargetSpeed - 6) || other.model === 'Heavy Electric Hauler' || other.model === 'Electric City Bus';
+            const isNotNearEnd = vehicle.currentWaypointIndex < waypoints.length - 10;
+            const isBatteryHealthy = vehicle.currentBatteryPct > 22;
+            const isSportOrCity = vehicle.driveMode !== 'ECO';
 
-                if (shouldYield && distToOther < minStoppingGap * 1.3) {
-                  const waitTicks = this.vehicleStationaryTicks.get(vehicle.id) || 0;
-                  if (waitTicks < 8) {
-                    effectiveSpeed = 0;
+            if (
+              !overtakeState &&
+              canOvertakeType &&
+              isLeadSlower &&
+              isNotNearEnd &&
+              isBatteryHealthy &&
+              isSportOrCity &&
+              longDist > minStoppingGap &&
+              longDist < (slowDownGap + 12.0)
+            ) {
+              // SCAN FOR ONCOMING VEHICLES in opposite direction
+              let hasOncomingTrafficAhead = false;
+              for (const cand of allVehicles) {
+                if (cand.id === vehicle.id || cand.id === other.id) continue;
+                if (cand.status === 'STRANDED' || cand.status === 'CHARGING' || cand.status === 'QUEUE' || cand.status === 'UNDER_REPAIR') continue;
+
+                const candFx = Math.sin(cand.heading || 0);
+                const candFz = Math.cos(cand.heading || 0);
+                const candAlignment = fX * candFx + fZ * candFz;
+
+                // Opposing direction: vector dot product is negative (< -0.35)
+                if (candAlignment < -0.35) {
+                  const cDx = cand.position.x - vehicle.position.x;
+                  const cDz = cand.position.z - vehicle.position.z;
+                  const cLongDist = fX * cDx + fZ * cDz;
+                  const cLatDist = Math.abs(-fZ * cDx + fX * cDz);
+
+                  // Oncoming vehicle is ahead on our road within 65m overtaking sight distance and within road corridor
+                  if (cLongDist > 0 && cLongDist < 65.0 && cLatDist < 6.5) {
+                    hasOncomingTrafficAhead = true;
+                    break;
                   }
                 }
               }
-            } else {
-              // 4. ONCOMING TRAFFIC IN OPPOSITE DIRECTIONS (headingAlignment < -0.3)
-              // Strict dual-carriageway rule: Oncoming vehicles in opposite lanes NEVER stop facing each other ("amne samne")
-              // Both continue smoothly on their respective sides of the road divider.
-              if (distToOther < 4.5) {
-                effectiveSpeed = Math.max(22, effectiveSpeed * 0.85);
+
+              // Verify no other vehicle is already overtaking this same lead
+              const isLeadAlreadyBeingOvertaken = Array.from(this.vehicleOvertakeStates.values()).some(
+                st => st.targetVehicleId === other.id
+              );
+
+              if (!hasOncomingTrafficAhead && !isLeadAlreadyBeingOvertaken) {
+                // CLEAR TO OVERTAKE!
+                overtakeState = {
+                  targetVehicleId: other.id,
+                  phase: 'PULL_OUT',
+                  lateralOffset: 0.0,
+                  ticksInPhase: 0,
+                };
+                this.vehicleOvertakeStates.set(vehicle.id, overtakeState);
+                vehicle.trafficState = 'OVERTAKING';
+                vehicle.currentLocationName = `Overtaking ${other.code} (${other.model})`;
+              }
+            }
+
+            // Normal follow-gap moderation ONLY if NOT actively passing in the passing lane
+            if (!isOvertakingThisLead || (overtakeState && Math.abs(overtakeState.lateralOffset) < 1.8)) {
+              if (longDist < slowDownGap) {
+                hasObstacleAhead = true;
+                const gap = longDist - minStoppingGap;
+
+                if (gap <= 0.25) {
+                  if (other.speed < 2) {
+                    effectiveSpeed = Math.max(0, Math.min(effectiveSpeed, 10));
+                  } else {
+                    effectiveSpeed = Math.min(effectiveSpeed, Math.max(12, other.speed));
+                  }
+                } else {
+                  const ratio = Math.max(0.15, Math.min(1.0, gap / (slowDownGap - minStoppingGap)));
+                  const approachSpeed = Math.max(14, baseTargetSpeed * ratio);
+                  effectiveSpeed = Math.min(effectiveSpeed, approachSpeed);
+                }
+              }
+            }
+          } else if (Math.abs(headingAlignment) <= 0.3 && distToOther < 7.0 && longDist > 0.5) {
+            // 3. INTERSECTION CROSSING YIELD
+            if (other.speed > 8) {
+              const myPrio = (vehicle.model === 'Highway Patrol EV' ? 10 : (vehicle.model === 'Electric City Bus' || vehicle.model === 'Heavy Electric Hauler') ? 8 : 1);
+              const otherPrio = (other.model === 'Highway Patrol EV' ? 10 : (other.model === 'Electric City Bus' || other.model === 'Heavy Electric Hauler') ? 8 : 1);
+              if (myPrio < otherPrio || (myPrio === otherPrio && vehicle.id > other.id)) {
+                effectiveSpeed = Math.min(effectiveSpeed, 12);
               }
             }
           }
         }
 
-        // Anti-Deadlock and Unstick Watchdog
-        if (effectiveSpeed === 0) {
-          const stationaryTicks = (this.vehicleStationaryTicks.get(vehicle.id) || 0) + 1;
+        // 4. OVERTAKING LIFECYCLE & SPEED MANAGEMENT
+        if (overtakeState) {
+          overtakeState.ticksInPhase++;
+          const leadVeh = vehicleService.getVehicleById(overtakeState.targetVehicleId);
+
+          if (!leadVeh || leadVeh.status === 'CHARGING' || leadVeh.status === 'QUEUE' || leadVeh.status === 'UNDER_REPAIR') {
+            overtakeState.phase = 'MERGE_BACK';
+          }
+
+          if (overtakeState.phase === 'PULL_OUT') {
+            vehicle.trafficState = 'OVERTAKING';
+            // Smoothly shift to left passing lane (-3.7 meters lateral offset)
+            const shiftRate = 2.4 * SimulationEngine.DT * this.speedMultiplier;
+            overtakeState.lateralOffset = Math.max(-3.7, overtakeState.lateralOffset - shiftRate);
+            effectiveSpeed = Math.max(effectiveSpeed, Math.min(82, baseTargetSpeed * 1.15));
+
+            // Safety check: Did an oncoming vehicle unexpectedly appear ahead?
+            let oncomingDanger = false;
+            for (const cand of allVehicles) {
+              if (cand.id === vehicle.id || cand.id === overtakeState.targetVehicleId) continue;
+              if (cand.status === 'STRANDED' || cand.status === 'CHARGING') continue;
+              const candAlign = fX * Math.sin(cand.heading || 0) + fZ * Math.cos(cand.heading || 0);
+              if (candAlign < -0.35) {
+                const cDx = cand.position.x - vehicle.position.x;
+                const cDz = cand.position.z - vehicle.position.z;
+                const cLong = fX * cDx + fZ * cDz;
+                const cLat = Math.abs(-fZ * cDx + fX * cDz);
+                if (cLong > 0 && cLong < 45.0 && cLat < 6.5) {
+                  oncomingDanger = true;
+                  break;
+                }
+              }
+            }
+
+            if (oncomingDanger) {
+              // Abort overtake and merge back safely
+              overtakeState.phase = 'MERGE_BACK';
+            } else if (overtakeState.lateralOffset <= -3.2) {
+              overtakeState.phase = 'PASSING';
+              overtakeState.ticksInPhase = 0;
+            }
+          } else if (overtakeState.phase === 'PASSING') {
+            vehicle.trafficState = 'OVERTAKING';
+            overtakeState.lateralOffset = -3.7;
+            const leadSpeed = leadVeh ? leadVeh.speed : 36;
+            effectiveSpeed = Math.min(88, Math.max(vehicle.speed, leadSpeed + 16, baseTargetSpeed * 1.22));
+
+            if (leadVeh) {
+              const toLeadX = leadVeh.position.x - vehicle.position.x;
+              const toLeadZ = leadVeh.position.z - vehicle.position.z;
+              const leadLongDist = fX * toLeadX + fZ * toLeadZ;
+              const leadHalf = getVehicleHalfLength(leadVeh.model);
+
+              // When lead vehicle is safely behind us by more than (myHalf + leadHalf + 4.5m)
+              if (leadLongDist < -(myHalfLength + leadHalf + 4.5) || overtakeState.ticksInPhase > 75) {
+                overtakeState.phase = 'MERGE_BACK';
+                overtakeState.ticksInPhase = 0;
+              }
+            } else {
+              overtakeState.phase = 'MERGE_BACK';
+              overtakeState.ticksInPhase = 0;
+            }
+          } else if (overtakeState.phase === 'MERGE_BACK') {
+            vehicle.trafficState = 'OVERTAKING';
+            // Smoothly glide back into original right lane (0.0 meters lateral offset)
+            const returnRate = 2.2 * SimulationEngine.DT * this.speedMultiplier;
+            overtakeState.lateralOffset = Math.min(0.0, overtakeState.lateralOffset + returnRate);
+            effectiveSpeed = Math.min(effectiveSpeed, baseTargetSpeed);
+
+            if (overtakeState.lateralOffset >= -0.15) {
+              overtakeState.lateralOffset = 0.0;
+              this.vehicleOvertakeStates.delete(vehicle.id);
+              vehicle.trafficState = 'CRUISING';
+            }
+          }
+        }
+
+        // Unstick & Circling Watchdogs
+        const currentStationary = this.vehicleStationaryTicks.get(vehicle.id) || 0;
+        if (effectiveSpeed <= 2) {
+          const stationaryTicks = currentStationary + 1;
           this.vehicleStationaryTicks.set(vehicle.id, stationaryTicks);
 
-          // If stopped for more than 12 ticks (~1.2s), break deadlock with gentle crawl
-          if (stationaryTicks > 12 && stationaryTicks <= 28) {
-            effectiveSpeed = 16;
-          } else if (stationaryTicks > 28) {
-            // Force nudge forward along route and clear deadlock
-            vehicle.currentWaypointIndex = Math.min(waypoints.length - 1, vehicle.currentWaypointIndex + 1);
-            effectiveSpeed = 34;
+          if (stationaryTicks > 20) {
+            // Unstick! Advance waypoint and restore normal cruising speed
+            vehicle.currentWaypointIndex = Math.min(waypoints.length - 1, vehicle.currentWaypointIndex + 2);
+            effectiveSpeed = Math.max(28, baseTargetSpeed);
             this.vehicleStationaryTicks.set(vehicle.id, 0);
           }
         } else {
-          this.vehicleStationaryTicks.set(vehicle.id, 0);
+          this.vehicleStationaryTicks.set(vehicle.id, Math.max(0, currentStationary - 1));
         }
 
-        const moveStep = (effectiveSpeed / 3.6) * 0.42 * this.speedMultiplier * SimulationEngine.DT;
+        // Anti-Donut / Orbiting Watchdog: Detect if a vehicle is circling or stuck on the same waypoint
+        const wpTracker = this.vehicleWaypointProgressTicks.get(vehicle.id) || { index: vehicle.currentWaypointIndex, ticks: 0 };
+        if (wpTracker.index === vehicle.currentWaypointIndex) {
+          wpTracker.ticks++;
+          if (wpTracker.ticks > 22) {
+            // Force-advance waypoint and align heading down the road
+            vehicle.currentWaypointIndex = Math.min(waypoints.length - 1, vehicle.currentWaypointIndex + 3);
+            wpTracker.index = vehicle.currentWaypointIndex;
+            wpTracker.ticks = 0;
+            const newTarget = waypoints[vehicle.currentWaypointIndex];
+            if (newTarget) {
+              vehicle.heading = Math.atan2(newTarget.x - vehicle.position.x, newTarget.z - vehicle.position.z);
+            }
+            effectiveSpeed = Math.max(28, baseTargetSpeed);
+          }
+        } else {
+          wpTracker.index = vehicle.currentWaypointIndex;
+          wpTracker.ticks = 0;
+        }
+        this.vehicleWaypointProgressTicks.set(vehicle.id, wpTracker);
 
-        if (vehicle.currentWaypointIndex >= waypoints.length - 1 && (dist <= moveStep || dist < 2.0)) {
+        const moveStep = (effectiveSpeed / 3.6) * 0.42 * this.speedMultiplier * SimulationEngine.DT;
+        const isNearFinalWp = vehicle.currentWaypointIndex >= waypoints.length - 1 && (dist <= Math.max(4.5, moveStep * 2.5) || (dx * fX + dz * fZ) <= 0.1);
+
+        if (isNearFinalWp) {
           vehicle.position = { ...targetWp };
           if (vehicle.serviceCenterId) {
             this.handleServiceCenterArrival(vehicle);
-          } else if (vehicle.destinationStationId && vehicle.currentBatteryPct < 85) {
+          } else if (vehicle.destinationStationId && vehicle.currentBatteryPct < 40) {
             this.handleStationEntranceArrival(vehicle, stations);
           } else if (vehicle.currentBatteryPct < 22) {
             const nearestStation = stations.reduce((acc, st) => {
@@ -380,43 +610,111 @@ export class SimulationEngine {
               return d < dAcc ? st : acc;
             }, stations[0]);
             
-            // Record pre-charge corridor and position so vehicle strictly rejoins its SAME route after charging
             (vehicle as any)._preChargeCorridorId = (vehicle as any)._corridorId || VehicleService.getNearestCorridorId(vehicle.position);
             (vehicle as any)._preChargeWaypointIndex = vehicle.currentWaypointIndex;
             (vehicle as any)._preChargeRoute = vehicle.routeWaypoints;
+            (vehicle as any)._preChargeHeading = vehicle.heading;
 
-            const stationRoute = VehicleService.getRouteForStation(nearestStation.code, vehicle.position);
+            const stationRoute = VehicleService.getRouteForStation(nearestStation.code, vehicle.position, vehicle.heading);
             vehicle.destinationStationId = nearestStation.id;
             vehicle.routeWaypoints = stationRoute;
             vehicle.currentWaypointIndex = 0;
             vehicle.routeProgress = 0.05;
             vehicle.currentLocationName = `Approaching ${nearestStation.name} [${nearestStation.code}] for recharge`;
           } else {
-            const corridorId = (vehicle as any)._corridorId || VehicleService.getNearestCorridorId(vehicle.position);
-            (vehicle as any)._corridorId = corridorId;
-            const corridor = REGIONAL_CORRIDORS[corridorId] || REGIONAL_CORRIDORS.palghar_sh40;
-            const newRoute = VehicleService.getCorridorRoute(corridorId);
-            vehicle.routeWaypoints = newRoute;
-            vehicle.currentWaypointIndex = 0;
-            vehicle.routeProgress = 0.0;
-            vehicle.destinationStationId = null;
-            vehicle.currentLocationName = `Patrolling ${corridor.name}`;
+            // Vehicle completed current route/circuit!
+            // Check if waypoints form a continuous circuit loop (start and end within 16m AND headings align)
+            const firstWp = waypoints[0];
+            const secondWp = waypoints[1] || waypoints[0];
+            const lastWp = waypoints[waypoints.length - 1];
+            const prevWp = waypoints[waypoints.length - 2] || lastWp;
+
+            const loopDist = firstWp && lastWp ? Math.hypot(firstWp.x - lastWp.x, firstWp.z - lastWp.z) : 999;
+            const startDirX = secondWp.x - firstWp.x;
+            const startDirZ = secondWp.z - firstWp.z;
+            const startLen = Math.hypot(startDirX, startDirZ) || 1;
+
+            const endDirX = lastWp.x - prevWp.x;
+            const endDirZ = lastWp.z - prevWp.z;
+            const endLen = Math.hypot(endDirX, endDirZ) || 1;
+
+            const dirAlignment = (startDirX * endDirX + startDirZ * endDirZ) / (startLen * endLen);
+            const isContinuousRing = loopDist < 16.0 && dirAlignment > 0.35;
+
+            if (isContinuousRing) {
+              // Seamless circuit continuation: loop index without ANY teleport or position jump
+              vehicle.currentWaypointIndex = 0;
+              vehicle.routeProgress = 0.0;
+            } else {
+              // Corridor reached terminus or completed spur — seamlessly fetch next continuous route forward
+              const currentCorridorId = (vehicle as any)._corridorId || VehicleService.getNearestCorridorId(vehicle.position);
+              const nextRouteData = VehicleService.getNextContinuousRoute(vehicle.position, currentCorridorId, vehicle.heading);
+
+              (vehicle as any)._corridorId = nextRouteData.corridorId;
+              vehicle.routeWaypoints = nextRouteData.route;
+              vehicle.currentWaypointIndex = 0;
+              vehicle.routeProgress = 0.0;
+              vehicle.destinationStationId = null;
+              vehicle.currentLocationName = `Patrolling ${nextRouteData.corridorName}`;
+            }
+            vehicle.speed = baseTargetSpeed;
           }
         } else {
-          const targetHeading = Math.atan2(dx, dz);
+          // Lookahead along upcoming waypoints for smooth curved cornering (Pure Pursuit)
+          const isHeavy = vehicle.model === 'Heavy Electric Hauler' || vehicle.model === 'Electric City Bus';
+          const lookaheadTargetDist = isHeavy ? 8.5 : (vehicle.speed > 40 ? 6.8 : 5.0);
+
+          let lookaheadIdx = vehicle.currentWaypointIndex;
+          let accumulatedDist = 0;
+          while (lookaheadIdx < waypoints.length - 1 && accumulatedDist < lookaheadTargetDist) {
+            const pA = waypoints[lookaheadIdx];
+            const pB = waypoints[lookaheadIdx + 1];
+            accumulatedDist += Math.hypot(pB.x - pA.x, pB.z - pA.z);
+            lookaheadIdx++;
+          }
+          const pursuitWp = waypoints[lookaheadIdx] || targetWp;
+          const normX = -Math.cos(vehicle.heading);
+          const normZ = Math.sin(vehicle.heading);
+
+          const currentOvertake = this.vehicleOvertakeStates.get(vehicle.id);
+          const latOffset = currentOvertake ? currentOvertake.lateralOffset : 0.0;
+          const shiftWpX = pursuitWp.x + normX * latOffset;
+          const shiftWpZ = pursuitWp.z + normZ * latOffset;
+
+          const pdx = shiftWpX - vehicle.position.x;
+          const pdz = shiftWpZ - vehicle.position.z;
+          const targetHeading = Math.atan2(pdx, pdz);
+
           let headingDiff = targetHeading - (vehicle.heading || 0);
           headingDiff = ((headingDiff + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
 
-          const isHeavy = vehicle.model === 'Heavy Electric Hauler' || vehicle.model === 'Electric City Bus';
-          const maxTurnRate = isHeavy ? 2.8 : 4.0;
+          // If pursuit waypoint is severely behind the vehicle (> 110°), search further down the route to recover forward alignment
+          if (Math.abs(headingDiff) > 1.9 && lookaheadIdx < waypoints.length - 1) {
+            const recoverIdx = Math.min(waypoints.length - 1, lookaheadIdx + 5);
+            const recWp = waypoints[recoverIdx];
+            const recShiftX = recWp.x + normX * latOffset;
+            const recShiftZ = recWp.z + normZ * latOffset;
+            const recDx = recShiftX - vehicle.position.x;
+            const recDz = recShiftZ - vehicle.position.z;
+            const recHeading = Math.atan2(recDx, recDz);
+            let recDiff = recHeading - (vehicle.heading || 0);
+            recDiff = ((recDiff + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+            if (Math.abs(recDiff) < Math.abs(headingDiff)) {
+              headingDiff = recDiff;
+            }
+          }
+
+          const maxTurnRate = isHeavy ? 3.8 : 5.4;
           const maxTurn = maxTurnRate * SimulationEngine.DT * this.speedMultiplier;
           const clampedTurn = Math.max(-maxTurn, Math.min(maxTurn, headingDiff));
           vehicle.heading = (vehicle.heading || 0) + clampedTurn;
           vehicle.heading = ((vehicle.heading + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
 
-          if (Math.abs(headingDiff) > 0.4) {
-            const turnFactor = Math.min(1.0, (Math.abs(headingDiff) - 0.4) / 1.2);
-            effectiveSpeed = Math.max(18, effectiveSpeed * (1 - turnFactor * 0.35));
+          // Cornering speed moderation (naturally slow down during sharp turns)
+          if (Math.abs(headingDiff) > 0.35) {
+            const turnFactor = Math.min(1.0, (Math.abs(headingDiff) - 0.35) / 0.85);
+            const minCornerSpeed = vehicle.driveMode === 'SPORT' ? 45 : 24;
+            effectiveSpeed = Math.max(minCornerSpeed, effectiveSpeed * (1 - turnFactor * 0.32));
           }
 
           const actualMoveStep = (effectiveSpeed / 3.6) * 0.42 * this.speedMultiplier * SimulationEngine.DT;
@@ -424,12 +722,13 @@ export class SimulationEngine {
           vehicle.position.x += Math.sin(vehicle.heading) * forwardStep;
           vehicle.position.z += Math.cos(vehicle.heading) * forwardStep;
 
-          // Lane Centering Pull: keeps vehicle securely centered in its travel lane and off the divider
-          const driftX = targetWp.x - vehicle.position.x;
-          const driftZ = targetWp.z - vehicle.position.z;
-          const centeringRate = Math.min(0.25, 2.0 * SimulationEngine.DT * this.speedMultiplier);
-          vehicle.position.x += driftX * centeringRate;
-          vehicle.position.z += driftZ * centeringRate;
+          // Perpendicular lane centering with overtaking lateral shift support
+          const desiredShiftX = targetWp.x + normX * latOffset;
+          const desiredShiftZ = targetWp.z + normZ * latOffset;
+          const lateralErr = (desiredShiftX - vehicle.position.x) * normX + (desiredShiftZ - vehicle.position.z) * normZ;
+          const lateralPull = Math.max(-0.08, Math.min(0.08, lateralErr * 0.18));
+          vehicle.position.x += normX * lateralPull;
+          vehicle.position.z += normZ * lateralPull;
 
           vehicle.routeProgress = waypoints.length > 1 ? vehicle.currentWaypointIndex / waypoints.length : 0;
         }
@@ -816,37 +1115,49 @@ export class SimulationEngine {
           break;
         }
 
-        const targetApronZ = st.position.z + 6.8;
-        const forwardStep = (12 / 3.6) * 0.42 * this.speedMultiplier * SimulationEngine.DT;
-        vehicle.position.z = Math.min(targetApronZ, vehicle.position.z + forwardStep);
-        vehicle.heading = 0;
-        vehicle.speed = 12;
+        const prevCorridorId = (vehicle as any)._preChargeCorridorId || (vehicle as any)._corridorId || 'palghar_sh40';
+        const departureRoute = VehicleService.getDepartureRouteForCorridor(
+          st.code,
+          prevCorridorId,
+          vehicle.position,
+          (vehicle as any)._preChargeHeading
+        );
 
-        if (vehicle.position.z >= targetApronZ - 0.1) {
-          const corridorId = (vehicle as any)._preChargeCorridorId || (vehicle as any)._corridorId || VehicleService.getNearestCorridorId(vehicle.position);
-          const resumeRoute = VehicleService.getDepartureRouteForCorridor(st.code, corridorId, vehicle.position);
-          
-          vehicle.routeWaypoints = resumeRoute;
+        if (departureRoute && departureRoute.length > 1) {
+          vehicle.routeWaypoints = departureRoute;
           vehicle.currentWaypointIndex = 0;
           vehicle.status = 'EN_ROUTE';
           vehicle.trafficState = 'CRUISING';
           vehicle.currentStationId = null;
           vehicle.destinationStationId = null;
-          (vehicle as any)._corridorId = corridorId;
+          (vehicle as any)._corridorId = prevCorridorId;
           (vehicle as any)._preChargeCorridorId = null;
           (vehicle as any)._preChargeRoute = null;
+          (vehicle as any)._preChargeHeading = null;
           vehicle.speed = 36;
-          
-          const corridorName = REGIONAL_CORRIDORS[corridorId]?.name || 'public highway';
-          vehicle.currentLocationName = `Patrolling ${corridorName}`;
+          vehicle.currentLocationName = `Patrolling ${REGIONAL_CORRIDORS[prevCorridorId]?.name || 'Regional Highway'}`;
 
           eventService.addEvent({
             type: 'STATUS_CHANGE',
             severity: 'INFO',
-            message: `🚗 ${vehicle.code} finished charging (${vehicle.currentBatteryPct}%) and rejoined ${corridorName} on its original route`,
+            message: `🚗 ${vehicle.code} finished charging (${vehicle.currentBatteryPct}%) and seamlessly merged onto ${REGIONAL_CORRIDORS[prevCorridorId]?.name || 'corridor'}`,
             vehicleId: vehicle.id,
             stationId: st.id,
           });
+        } else {
+          const nextRouteData = VehicleService.getNextContinuousRoute(vehicle.position, prevCorridorId, vehicle.heading);
+          vehicle.routeWaypoints = nextRouteData.route;
+          vehicle.currentWaypointIndex = 0;
+          vehicle.status = 'EN_ROUTE';
+          vehicle.trafficState = 'CRUISING';
+          vehicle.currentStationId = null;
+          vehicle.destinationStationId = null;
+          (vehicle as any)._corridorId = nextRouteData.corridorId;
+          (vehicle as any)._preChargeCorridorId = null;
+          (vehicle as any)._preChargeRoute = null;
+          (vehicle as any)._preChargeHeading = null;
+          vehicle.speed = 36;
+          vehicle.currentLocationName = `Patrolling ${nextRouteData.corridorName}`;
         }
         break;
       }
@@ -867,7 +1178,7 @@ export class SimulationEngine {
           const fZ = Math.cos(vehicle.heading || 0);
           const dot = wdx * fX + wdz * fZ;
 
-          if (wdist < 2.4 || (dot < 0.2 && wdist < 5.0)) {
+          if (wdist < 1.8 || (dot < -0.35 && wdist < 2.5)) {
             vehicle.currentWaypointIndex++;
           } else {
             break;
@@ -959,26 +1270,25 @@ export class SimulationEngine {
       }
 
       case 'LEFT_NETWORK': {
-        const corridorId = (vehicle as any)._corridorId || VehicleService.getNearestCorridorId(vehicle.position);
-        (vehicle as any)._corridorId = corridorId;
-        const newRoute = VehicleService.getCorridorRoute(corridorId);
+        const currentCorridorId = (vehicle as any)._corridorId || VehicleService.getNearestCorridorId(vehicle.position);
+        const nextRouteData = VehicleService.getNextContinuousRoute(vehicle.position, currentCorridorId, vehicle.heading);
+        (vehicle as any)._corridorId = nextRouteData.corridorId;
         vehicle.destinationStationId = null;
-        vehicle.routeWaypoints = newRoute;
+        vehicle.routeWaypoints = nextRouteData.route;
         vehicle.currentWaypointIndex = 0;
-        if (newRoute.length > 0) {
-          vehicle.position = { ...newRoute[0] };
-        }
-        if (newRoute.length > 1) {
-          const nextWp = newRoute[1];
+        const nextWp = nextRouteData.route[0] || nextRouteData.route[1];
+        if (nextWp) {
           vehicle.heading = Math.atan2(nextWp.x - vehicle.position.x, nextWp.z - vehicle.position.z);
         }
+
         vehicle.currentBatteryPct = Math.floor(75 + Math.random() * 20);
         vehicle.estimatedRangeKm = Math.round((vehicle.currentBatteryPct / 100) * 380);
         vehicle.energyConsumedKwh = 0;
         vehicle.status = 'EN_ROUTE';
+        vehicle.trafficState = 'CRUISING';
         vehicle.speed = Math.floor(36 + Math.random() * 10);
-        vehicle.routeProgress = 0.05;
-        vehicle.currentLocationName = `Patrolling ${REGIONAL_CORRIDORS[corridorId]?.name || 'City Route'}`;
+        vehicle.routeProgress = 0;
+        vehicle.currentLocationName = `Patrolling ${nextRouteData.corridorName}`;
         vehicle.etaMinutes = 4;
         break;
       }
@@ -1191,7 +1501,7 @@ export class SimulationEngine {
         });
 
         const altStation = stations.find(s => s.id !== targetStation.id && s.status === 'ONLINE' && s.chargers.some(c => c.status === 'AVAILABLE')) || stations[1] || stations[0];
-        const newRoute = VehicleService.getRouteFromCurrentPositionTo(affectedEv.position, altStation.position);
+        const newRoute = VehicleService.getRouteFromCurrentPositionTo(affectedEv.position, altStation.position, affectedEv.heading);
 
         affectedEv.destinationStationId = altStation.id;
         affectedEv.assignedChargerId = null;
@@ -1272,7 +1582,7 @@ export class SimulationEngine {
 
     const stations = stationService.getAllStations();
     const targetStation = stations[1] || stations[0];
-    const newRoute = VehicleService.getRouteFromCurrentPositionTo(v.position, targetStation.position);
+    const newRoute = VehicleService.getRouteFromCurrentPositionTo(v.position, targetStation.position, v.heading);
 
     v.status = 'EN_ROUTE';
     v.trafficState = 'CRUISING';
